@@ -39,7 +39,12 @@ public class OrderServiceImpl implements OrderService {
                         (acc, item) -> acc.add(item.getPrice().multiply(BigDecimal.valueOf(item.getQuantity()))),
                         BigDecimal::add);
 
-        OrderCreatedEvent event = new OrderCreatedEvent(orderId, request.getUserId(), items, totalAmount);
+        OrderCreatedEvent event = OrderCreatedEvent.builder()
+                .orderId(orderId)
+                .userId(request.getUserId())
+                .items(items)
+                .totalAmount(totalAmount)
+                .build();
 
         orderEventProducer.publishOrderCreated(event);
 

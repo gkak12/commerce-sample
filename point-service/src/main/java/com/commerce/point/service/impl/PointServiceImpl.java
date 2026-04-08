@@ -53,13 +53,13 @@ public class PointServiceImpl implements PointService {
                 event.getUserId(), earnedPoint, wallet.getTotalPoint());
 
         String pointId = UUID.randomUUID().toString();
-        PointEarnedEvent earnedEvent = new PointEarnedEvent(
-                pointId,
-                event.getUserId(),
-                event.getOrderId(),
-                earnedPoint,
-                wallet.getTotalPoint()
-        );
+        PointEarnedEvent earnedEvent = PointEarnedEvent.builder()
+                .pointId(pointId)
+                .userId(event.getUserId())
+                .orderId(event.getOrderId())
+                .earnedPoint(earnedPoint)
+                .totalPoint(wallet.getTotalPoint())
+                .build();
         pointEventProducer.publishPointEarned(earnedEvent);
     }
 }

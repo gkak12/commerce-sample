@@ -49,11 +49,11 @@ public class OrderServiceImpl implements OrderService {
         orderRepository.save(order);
         log.info("[Order] Order saved. orderId={}, userId={}", order.getOrderId(), order.getUserId());
 
-        OrderConfirmedEvent confirmedEvent = new OrderConfirmedEvent(
-                event.getOrderId(),
-                event.getUserId(),
-                event.getTotalAmount()
-        );
+        OrderConfirmedEvent confirmedEvent = OrderConfirmedEvent.builder()
+                .orderId(event.getOrderId())
+                .userId(event.getUserId())
+                .totalAmount(event.getTotalAmount())
+                .build();
         orderEventProducer.publishOrderConfirmed(confirmedEvent);
     }
 }

@@ -81,12 +81,12 @@ public class PaymentServiceImpl implements PaymentService {
                 tossResponse.getApprovedAt()
         );
 
-        PaymentCompletedEvent completedEvent = new PaymentCompletedEvent(
-                payment.getPaymentId(),
-                payment.getOrderId(),
-                payment.getUserId(),
-                payment.getAmount()
-        );
+        PaymentCompletedEvent completedEvent = PaymentCompletedEvent.builder()
+                .paymentId(payment.getPaymentId())
+                .orderId(payment.getOrderId())
+                .userId(payment.getUserId())
+                .amount(payment.getAmount())
+                .build();
         paymentEventProducer.publishPaymentCompleted(completedEvent);
 
         return PaymentConfirmResponse.builder()
@@ -117,12 +117,12 @@ public class PaymentServiceImpl implements PaymentService {
         if ("DONE".equals(status)) {
             if (payment.getStatus() != PaymentStatus.COMPLETED) {
                 payment.complete(data.getPaymentKey(), null, null);
-                PaymentCompletedEvent completedEvent = new PaymentCompletedEvent(
-                        payment.getPaymentId(),
-                        payment.getOrderId(),
-                        payment.getUserId(),
-                        payment.getAmount()
-                );
+                PaymentCompletedEvent completedEvent = PaymentCompletedEvent.builder()
+                        .paymentId(payment.getPaymentId())
+                        .orderId(payment.getOrderId())
+                        .userId(payment.getUserId())
+                        .amount(payment.getAmount())
+                        .build();
                 paymentEventProducer.publishPaymentCompleted(completedEvent);
                 log.info("[Webhook] Payment completed via webhook. orderId={}", payment.getOrderId());
             }
