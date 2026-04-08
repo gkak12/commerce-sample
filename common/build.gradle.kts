@@ -17,4 +17,18 @@ dependencies {
     // JPA (BaseEntity에서 사용)
     compileOnly("jakarta.persistence:jakarta.persistence-api:3.1.0")
     compileOnly("org.springframework.data:spring-data-jpa:3.2.3")
+
+    // QueryDSL (QBaseEntity 생성용)
+    implementation("com.querydsl:querydsl-jpa:5.1.0:jakarta")
+    annotationProcessor("com.querydsl:querydsl-apt:5.1.0:jakarta")
+    annotationProcessor("jakarta.annotation:jakarta.annotation-api:2.1.1")
+    annotationProcessor("jakarta.persistence:jakarta.persistence-api:3.1.0")
+}
+
+sourceSets {
+    main {
+        java {
+            srcDir("build/generated/sources/annotationProcessor/java/main")
+        }
+    }
 }
