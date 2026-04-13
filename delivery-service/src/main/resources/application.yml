@@ -41,5 +41,7 @@ server:
   port: 8083
 
 logging:
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] [traceId=%X{traceId:-none}] [from=%X{sourceService:-none}] %-5level %logger{36} - %msg%n"
   level:
     com.commerce.delivery: DEBUG

@@ -69,5 +69,7 @@ server:
   port: 8080
 
 logging:
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] [traceId=%X{traceId:-none}] %-5level %logger{36} - %msg%n"
   level:
     com.commerce.bff: DEBUG
