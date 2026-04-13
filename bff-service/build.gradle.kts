@@ -31,6 +31,8 @@ dependencies {
     annotationProcessor("jakarta.persistence:jakarta.persistence-api")
 
     runtimeOnly("com.mysql:mysql-connector-j")
+    implementation("org.flywaydb:flyway-core")
+    implementation("org.flywaydb:flyway-mysql")
 
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")
