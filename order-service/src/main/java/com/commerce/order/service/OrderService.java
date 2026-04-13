@@ -4,4 +4,5 @@ import com.commerce.common.event.OrderCreatedEvent;
 
 public interface OrderService {
     void processOrderCreated(OrderCreatedEvent event);
+    void cancelOrder(String orderId);
 }

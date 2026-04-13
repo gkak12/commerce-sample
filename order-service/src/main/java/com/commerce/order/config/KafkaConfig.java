@@ -16,8 +16,13 @@ import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
+import org.springframework.kafka.listener.CommonErrorHandler;
+import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
+import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
 import org.springframework.kafka.support.serializer.JsonSerializer;
+import org.springframework.kafka.config.TopicBuilder;
+import org.springframework.util.backoff.FixedBackOff;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -66,11 +71,36 @@ public class KafkaConfig {
         return new DefaultKafkaConsumerFactory<>(config, new StringDeserializer(), deserializer);
     }
 
+    // 토픽 자동 생성: 3 파티션, orderId 키 기반 파티셔닝으로 동일 주문 이벤트가 항상 같은 파티션에 할당됨
+    @Bean
+    public org.apache.kafka.clients.admin.NewTopic orderCreatedTopic() {
+        return TopicBuilder.name(com.commerce.common.kafka.KafkaTopic.ORDER_CREATED).partitions(3).replicas(1).build();
+    }
+
+    @Bean
+    public org.apache.kafka.clients.admin.NewTopic orderConfirmedTopic() {
+        return TopicBuilder.name(com.commerce.common.kafka.KafkaTopic.ORDER_CONFIRMED).partitions(3).replicas(1).build();
+    }
+
+    @Bean
+    public org.apache.kafka.clients.admin.NewTopic paymentFailedTopic() {
+        return TopicBuilder.name(com.commerce.common.kafka.KafkaTopic.PAYMENT_FAILED).partitions(3).replicas(1).build();
+    }
+
+    @Bean
+    public CommonErrorHandler errorHandler() {
+        // 2초 간격으로 최대 3회 재시도, 이후 DLT로 발행
+        DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(kafkaTemplate());
+        return new DefaultErrorHandler(recoverer, new FixedBackOff(2000L, 3));
+    }
+
     @Bean
     public ConcurrentKafkaListenerContainerFactory<String, Object> kafkaListenerContainerFactory() {
         ConcurrentKafkaListenerContainerFactory<String, Object> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory());
+        factory.setCommonErrorHandler(errorHandler());
+        factory.setConcurrency(3);
         return factory;
     }
 }

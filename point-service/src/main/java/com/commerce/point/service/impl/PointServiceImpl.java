@@ -2,13 +2,17 @@ package com.commerce.point.service.impl;
 
 import com.commerce.common.event.PaymentCompletedEvent;
 import com.commerce.common.event.PointEarnedEvent;
+import com.commerce.common.kafka.KafkaTopic;
 import com.commerce.point.entity.Point;
 import com.commerce.point.entity.PointType;
 import com.commerce.point.entity.PointWallet;
-import com.commerce.point.kafka.PointEventProducer;
+import com.commerce.point.outbox.OutboxEvent;
+import com.commerce.point.outbox.OutboxEventRepository;
 import com.commerce.point.repository.PointRepository;
 import com.commerce.point.repository.PointWalletRepository;
 import com.commerce.point.service.PointService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,43 +27,57 @@ public class PointServiceImpl implements PointService {
 
     private static final Logger log = LoggerFactory.getLogger(PointServiceImpl.class);
 
-    // 결제금액의 1% 포인트 적립
-    private static final double POINT_RATE = 0.01;
+    private static final double POINT_RATE = 0.01; // 결제금액의 1% 적립
 
     private final PointRepository pointRepository;
     private final PointWalletRepository pointWalletRepository;
-    private final PointEventProducer pointEventProducer;
+    private final OutboxEventRepository outboxEventRepository;
+    private final ObjectMapper objectMapper;
 
     @Override
     @Transactional
     public void earnPoint(PaymentCompletedEvent event) {
+        // 멱등성 체크
+        if (pointRepository.existsByOrderId(event.getOrderId())) {
+            log.warn("[Point] Duplicate event ignored. orderId={}", event.getOrderId());
+            return;
+        }
+
         long earnedPoint = (long) (event.getAmount().doubleValue() * POINT_RATE);
 
         PointWallet wallet = pointWalletRepository.findById(event.getUserId())
                 .orElseGet(() -> new PointWallet(event.getUserId(), 0L));
-
         wallet.earn(earnedPoint);
         pointWalletRepository.save(wallet);
 
-        Point point = Point.builder()
+        pointRepository.save(Point.builder()
                 .userId(event.getUserId())
                 .orderId(event.getOrderId())
                 .earnedPoint(earnedPoint)
                 .type(PointType.EARN)
-                .build();
-        pointRepository.save(point);
+                .build());
 
         log.info("[Point] Point earned. userId={}, earnedPoint={}, totalPoint={}",
                 event.getUserId(), earnedPoint, wallet.getTotalPoint());
 
-        String pointId = UUID.randomUUID().toString();
+        // Outbox 패턴: point.earned 이벤트 적재
         PointEarnedEvent earnedEvent = PointEarnedEvent.builder()
-                .pointId(pointId)
+                .pointId(UUID.randomUUID().toString())
                 .userId(event.getUserId())
                 .orderId(event.getOrderId())
                 .earnedPoint(earnedPoint)
                 .totalPoint(wallet.getTotalPoint())
                 .build();
-        pointEventProducer.publishPointEarned(earnedEvent);
+
+        outboxEventRepository.save(OutboxEvent.create(
+                event.getOrderId(), KafkaTopic.POINT_EARNED, serialize(earnedEvent)));
+    }
+
+    private String serialize(Object obj) {
+        try {
+            return objectMapper.writeValueAsString(obj);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Failed to serialize event", e);
+        }
     }
 }
