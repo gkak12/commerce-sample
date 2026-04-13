@@ -154,6 +154,11 @@ public class KafkaConfig {
         return TopicBuilder.name(com.commerce.common.kafka.KafkaTopic.PAYMENT_FAILED).partitions(3).replicas(1).build();
     }
 
+    @Bean
+    public org.apache.kafka.clients.admin.NewTopic stockRestoreTopic() {
+        return TopicBuilder.name(com.commerce.common.kafka.KafkaTopic.STOCK_RESTORE).partitions(3).replicas(1).build();
+    }
+
     // ── 에러 핸들러 (지수 백오프 DLT) ─────────────────────────────────────────
     @Bean
     public CommonErrorHandler errorHandler() {

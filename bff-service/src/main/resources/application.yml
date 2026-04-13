@@ -10,6 +10,20 @@ spring:
       properties:
         spring.json.add.type.headers: false
 
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: 1234
+      timeout: 2000ms
+      connect-timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
+          max-wait: 2000ms
+
   datasource:
     url: jdbc:mysql://localhost:3306/bff_db?useSSL=false&serverTimezone=Asia/Seoul&allowPublicKeyRetrieval=true
     username: root

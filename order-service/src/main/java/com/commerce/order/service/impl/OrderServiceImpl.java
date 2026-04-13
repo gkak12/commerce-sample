@@ -2,6 +2,7 @@ package com.commerce.order.service.impl;
 
 import com.commerce.common.event.OrderConfirmedEvent;
 import com.commerce.common.event.OrderCreatedEvent;
+import com.commerce.common.event.StockRestoreEvent;
 import com.commerce.common.kafka.KafkaTopic;
 import com.commerce.order.entity.Order;
 import com.commerce.order.entity.OrderItem;
@@ -60,7 +61,7 @@ public class OrderServiceImpl implements OrderService {
         orderRepository.save(order);
         log.info("[Order] Order saved. orderId={}, userId={}", order.getOrderId(), order.getUserId());
 
-        // Outbox 패턴: DB 저장과 동일 트랜잭션 내 이벤트 적재
+        // Outbox: order.confirmed 발행
         OrderConfirmedEvent confirmedEvent = OrderConfirmedEvent.builder()
                 .orderId(event.getOrderId())
                 .userId(event.getUserId())
@@ -78,8 +79,36 @@ public class OrderServiceImpl implements OrderService {
     @Transactional
     public void cancelOrder(String orderId) {
         orderRepository.findById(orderId).ifPresent(order -> {
+            if (order.getStatus() == OrderStatus.CANCELLED) {
+                log.warn("[Order] Already cancelled. orderId={}", orderId);
+                return;
+            }
+
             order.setStatus(OrderStatus.CANCELLED);
             log.info("[Order] Order cancelled by Saga compensation. orderId={}", orderId);
+
+            // Saga 보상: stock.restore 발행 → bff-service Redis 재고 복구
+            List<StockRestoreEvent.StockItem> stockItems = order.getOrderItems().stream()
+                    .map(item -> StockRestoreEvent.StockItem.builder()
+                            .productId(item.getProductId())
+                            .quantity(item.getQuantity())
+                            .build())
+                    .collect(Collectors.toList());
+
+            StockRestoreEvent restoreEvent = StockRestoreEvent.builder()
+                    .orderId(orderId)
+                    .userId(order.getUserId())
+                    .items(stockItems)
+                    .build();
+
+            outboxEventRepository.save(OutboxEvent.create(
+                    orderId,
+                    KafkaTopic.STOCK_RESTORE,
+                    serialize(restoreEvent)
+            ));
+
+            log.info("[Order][Saga] Stock restore event queued. orderId={}, items={}",
+                    orderId, stockItems.size());
         });
     }
 
