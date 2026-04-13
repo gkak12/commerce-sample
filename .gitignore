@@ -26,3 +26,6 @@ logs/
 
 ### Env ###
 .env
+
+### Txt ###
+.txt
