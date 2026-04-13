@@ -28,4 +28,4 @@ logs/
 .env
 
 ### Txt ###
-.txt
+*.txt
