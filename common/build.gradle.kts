@@ -1,6 +1,6 @@
 plugins {
     `java`
-    id("com.google.protobuf") version "0.9.4"
+    id("com.google.protobuf")
 }
 
 java {
@@ -30,22 +30,26 @@ dependencies {
     implementation("io.grpc:grpc-protobuf:1.62.2")
     // @Generated 어노테이션 (protoc 코드 생성에 필요)
     compileOnly("javax.annotation:javax.annotation-api:1.3.2")
+
+    // KafkaProducerTraceInterceptor 컴파일용 (런타임은 각 서비스의 spring-kafka가 제공)
+    compileOnly("org.apache.kafka:kafka-clients:3.6.1")
 }
 
 // ── protobuf 코드 생성 설정 ────────────────────────────────────────────────────
+// Kotlin DSL에서는 id() 대신 create() 사용
 protobuf {
     protoc {
         artifact = "com.google.protobuf:protoc:3.25.3"
     }
     plugins {
-        id("grpc") {
+        create("grpc") {
             artifact = "io.grpc:protoc-gen-grpc-java:1.62.2"
         }
     }
     generateProtoTasks {
-        all().forEach {
-            it.plugins {
-                id("grpc")
+        all().forEach { task ->
+            task.plugins {
+                create("grpc")
             }
         }
     }
