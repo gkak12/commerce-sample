@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -28,6 +29,7 @@ public class EmailService {
     /**
      * 주문 완료 메일
      */
+    @Async
     public void sendOrderCompletedMail(String to, String orderId, BigDecimal totalAmount, LocalDateTime completedAt) {
         String subject = "[Commerce] 주문이 완료되었습니다 - " + orderId;
         String content = buildOrderCompletedHtml(orderId, totalAmount, completedAt);
@@ -37,6 +39,7 @@ public class EmailService {
     /**
      * 주문 취소 메일
      */
+    @Async
     public void sendOrderCancelledMail(String to, String orderId, String reason) {
         String subject = "[Commerce] 주문이 취소되었습니다 - " + orderId;
         String content = buildOrderCancelledHtml(orderId, reason);
