@@ -6,6 +6,8 @@ import com.commerce.bff.grpc.PointGrpcClient;
 import com.commerce.grpc.delivery.GetDeliveryStatusResponse;
 import com.commerce.grpc.order.GetOrderStatusResponse;
 import com.commerce.grpc.order.OrderSummary;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -26,6 +28,7 @@ import java.util.Map;
  * GET /api/my/orders/{orderId} → order-service + delivery-service (gRPC) : 주문 상세 + 배송 상태
  * GET /api/my/points           → point-service (gRPC) : 포인트 잔액
  */
+@Tag(name = "마이페이지", description = "주문/배송/포인트 조회 (내부 gRPC 통신)")
 @RestController
 @RequestMapping("/api/my")
 @RequiredArgsConstructor
@@ -36,6 +39,7 @@ public class MyPageController {
     private final DeliveryGrpcClient deliveryGrpcClient;
 
     // ── 내 주문 목록 ────────────────────────────────────────────────────────────
+    @Operation(summary = "내 주문 목록", description = "order-service에 gRPC로 조회합니다.")
     @GetMapping("/orders")
     public ResponseEntity<Map<String, Object>> getMyOrders(
             @AuthenticationPrincipal UserDetails userDetails) {
@@ -63,6 +67,7 @@ public class MyPageController {
     }
 
     // ── 주문 상세 + 배송 상태 통합 조회 ────────────────────────────────────────
+    @Operation(summary = "주문 상세 + 배송 상태", description = "order-service와 delivery-service에 gRPC로 동시 조회합니다.")
     @GetMapping("/orders/{orderId}")
     public ResponseEntity<Map<String, Object>> getOrderDetail(
             @PathVariable String orderId,
@@ -111,6 +116,7 @@ public class MyPageController {
     }
 
     // ── 포인트 잔액 조회 ────────────────────────────────────────────────────────
+    @Operation(summary = "포인트 잔액", description = "point-service에 gRPC로 조회합니다.")
     @GetMapping("/points")
     public ResponseEntity<Map<String, Object>> getMyPoints(
             @AuthenticationPrincipal UserDetails userDetails) {

@@ -1,6 +1,10 @@
 package com.commerce.bff.controller;
 
 import com.commerce.bff.stock.StockRedisService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,6 +27,7 @@ import java.util.Map;
  * - PUT  /api/stocks/{productId}/init  : 상품 재고 재설정 (관리자 전용)
  * - GET  /api/stocks/{productId}       : 현재 재고 조회
  */
+@Tag(name = "재고", description = "Redis 기반 실시간 재고 관리 API")
 @RestController
 @RequestMapping("/api/stocks")
 @RequiredArgsConstructor
@@ -36,6 +41,8 @@ public class StockController {
      * 재고 초기화 (최초 등록 시 사용)
      * POST /api/stocks/{productId}/init?quantity=100
      */
+    @Operation(summary = "재고 초기화", description = "상품 최초 등록 시 Redis에 재고를 설정합니다. ADMIN 권한 필요.",
+        security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping("/{productId}/init")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> initStock(
@@ -66,6 +73,8 @@ public class StockController {
      * 재고 재설정 (덮어쓰기)
      * PUT /api/stocks/{productId}/init?quantity=200
      */
+    @Operation(summary = "재고 재설정", description = "기존 재고를 덮어씁니다. ADMIN 권한 필요.",
+        security = @SecurityRequirement(name = "bearerAuth"))
     @PutMapping("/{productId}/init")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> resetStock(
@@ -96,8 +105,10 @@ public class StockController {
      * 현재 재고 조회
      * GET /api/stocks/{productId}
      */
+    @Operation(summary = "재고 조회", description = "현재 재고 수량을 조회합니다. 인증 불필요.")
     @GetMapping("/{productId}")
-    public ResponseEntity<Map<String, Object>> getStock(@PathVariable String productId) {
+    public ResponseEntity<Map<String, Object>> getStock(
+            @Parameter(description = "상품 ID") @PathVariable String productId) {
         long stock = stockRedisService.getStock(productId);
 
         if (stock == -1L) {
