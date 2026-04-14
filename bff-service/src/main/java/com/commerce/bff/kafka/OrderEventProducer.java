@@ -1,5 +1,6 @@
 package com.commerce.bff.kafka;
 
+import com.commerce.common.event.OrderCancelRequestedEvent;
 import com.commerce.common.event.OrderCreatedEvent;
 import com.commerce.common.kafka.KafkaTopic;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +16,17 @@ public class OrderEventProducer {
     private static final Logger log = LoggerFactory.getLogger(OrderEventProducer.class);
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
+
+    public void publishOrderCancelRequested(OrderCancelRequestedEvent event) {
+        kafkaTemplate.send(KafkaTopic.ORDER_CANCEL_REQUESTED, event.getOrderId(), event)
+                .whenComplete((result, ex) -> {
+                    if (ex == null) {
+                        log.info("[Kafka] Order cancel requested event published. orderId={}", event.getOrderId());
+                    } else {
+                        log.error("[Kafka] Failed to publish order cancel requested event. orderId={}", event.getOrderId(), ex);
+                    }
+                });
+    }
 
     public void publishOrderCreated(OrderCreatedEvent event) {
         kafkaTemplate.send(KafkaTopic.ORDER_CREATED, event.getOrderId(), event)

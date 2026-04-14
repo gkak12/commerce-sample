@@ -1,0 +1,13 @@
+spring:
+  mail:
+    host: smtp.naver.com
+    port: 465
+    username: your-id@naver.com    # 네이버 메일 주소로 변경
+    password: your-naver-password  # 네이버 로그인 비밀번호
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
+            trust: smtp.naver.com

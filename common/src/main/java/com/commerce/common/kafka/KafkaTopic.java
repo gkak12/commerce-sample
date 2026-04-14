@@ -8,6 +8,13 @@ public interface KafkaTopic {
     String DELIVERY_STARTED = "delivery.started";
     String POINT_EARNED = "point.earned";
 
+    // 주문 완료 / 취소 (order-service 발행 → 알림 등 구독)
+    String ORDER_COMPLETED = "order.completed";
+    String ORDER_CANCELLED = "order.cancelled";
+
+    // 사용자 주문 취소 요청 (bff-service 발행 → order-service 처리)
+    String ORDER_CANCEL_REQUESTED = "order.cancel.requested";
+
     // Saga 보상 트랜잭션 토픽
     String PAYMENT_FAILED = "payment.failed";
 

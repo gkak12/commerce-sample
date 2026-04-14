@@ -1,7 +1,10 @@
 package com.commerce.order.service.impl;
 
+import com.commerce.common.event.OrderCancelledEvent;
+import com.commerce.common.event.OrderCompletedEvent;
 import com.commerce.common.event.OrderConfirmedEvent;
 import com.commerce.common.event.OrderCreatedEvent;
+import com.commerce.common.event.PaymentCompletedEvent;
 import com.commerce.common.event.StockRestoreEvent;
 import com.commerce.common.kafka.KafkaTopic;
 import com.commerce.order.entity.Order;
@@ -77,39 +80,100 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional
-    public void cancelOrder(String orderId) {
+    public void completeOrder(PaymentCompletedEvent event) {
+        orderRepository.findById(event.getOrderId()).ifPresent(order -> {
+            if (order.getStatus() == OrderStatus.COMPLETED) {
+                log.warn("[Order] Already completed. orderId={}", event.getOrderId());
+                return;
+            }
+
+            order.setStatus(OrderStatus.COMPLETED);
+            log.info("[Order] Order completed. orderId={}, userId={}", order.getOrderId(), order.getUserId());
+
+            // order.completed 발행 → 알림 서비스 구독
+            OrderCompletedEvent completedEvent = OrderCompletedEvent.builder()
+                    .orderId(order.getOrderId())
+                    .userId(order.getUserId())
+                    .totalAmount(order.getTotalAmount())
+                    .build();
+
+            outboxEventRepository.save(OutboxEvent.create(
+                    order.getOrderId(),
+                    KafkaTopic.ORDER_COMPLETED,
+                    serialize(completedEvent)
+            ));
+        });
+    }
+
+    /** 사용자 직접 취소: userId 본인 검증 + 취소 가능 상태 검증 */
+    @Override
+    @Transactional
+    public void cancelOrder(String orderId, String userId, String reason) {
+        orderRepository.findById(orderId).ifPresent(order -> {
+            if (!order.getUserId().equals(userId)) {
+                log.warn("[Order] Unauthorized cancel attempt. orderId={}, requestUserId={}", orderId, userId);
+                return;
+            }
+            if (order.getStatus() == OrderStatus.DELIVERING
+                    || order.getStatus() == OrderStatus.DELIVERED
+                    || order.getStatus() == OrderStatus.COMPLETED
+                    || order.getStatus() == OrderStatus.CANCELLED) {
+                log.warn("[Order] Cannot cancel. orderId={}, status={}", orderId, order.getStatus());
+                return;
+            }
+            cancelOrderInternal(order, reason);
+        });
+    }
+
+    /** Saga 보상 취소: 결제 실패로 인한 시스템 취소 */
+    @Override
+    @Transactional
+    public void cancelOrder(String orderId, String reason) {
         orderRepository.findById(orderId).ifPresent(order -> {
             if (order.getStatus() == OrderStatus.CANCELLED) {
                 log.warn("[Order] Already cancelled. orderId={}", orderId);
                 return;
             }
-
-            order.setStatus(OrderStatus.CANCELLED);
-            log.info("[Order] Order cancelled by Saga compensation. orderId={}", orderId);
-
-            // Saga 보상: stock.restore 발행 → bff-service Redis 재고 복구
-            List<StockRestoreEvent.StockItem> stockItems = order.getOrderItems().stream()
-                    .map(item -> StockRestoreEvent.StockItem.builder()
-                            .productId(item.getProductId())
-                            .quantity(item.getQuantity())
-                            .build())
-                    .collect(Collectors.toList());
-
-            StockRestoreEvent restoreEvent = StockRestoreEvent.builder()
-                    .orderId(orderId)
-                    .userId(order.getUserId())
-                    .items(stockItems)
-                    .build();
-
-            outboxEventRepository.save(OutboxEvent.create(
-                    orderId,
-                    KafkaTopic.STOCK_RESTORE,
-                    serialize(restoreEvent)
-            ));
-
-            log.info("[Order][Saga] Stock restore event queued. orderId={}, items={}",
-                    orderId, stockItems.size());
+            cancelOrderInternal(order, reason);
         });
+    }
+
+    // ── private ──────────────────────────────────────────────────────────────
+
+    private void cancelOrderInternal(Order order, String reason) {
+        order.setStatus(OrderStatus.CANCELLED);
+        log.info("[Order] Order cancelled. orderId={}, reason={}", order.getOrderId(), reason);
+
+        List<StockRestoreEvent.StockItem> stockItems = order.getOrderItems().stream()
+                .map(item -> StockRestoreEvent.StockItem.builder()
+                        .productId(item.getProductId())
+                        .quantity(item.getQuantity())
+                        .build())
+                .collect(Collectors.toList());
+
+        // stock.restore 발행 → bff-service Redis 재고 복구
+        outboxEventRepository.save(OutboxEvent.create(
+                order.getOrderId(),
+                KafkaTopic.STOCK_RESTORE,
+                serialize(StockRestoreEvent.builder()
+                        .orderId(order.getOrderId())
+                        .userId(order.getUserId())
+                        .items(stockItems)
+                        .build())
+        ));
+
+        // order.cancelled 발행 → 취소 이메일
+        outboxEventRepository.save(OutboxEvent.create(
+                order.getOrderId(),
+                KafkaTopic.ORDER_CANCELLED,
+                serialize(OrderCancelledEvent.builder()
+                        .orderId(order.getOrderId())
+                        .userId(order.getUserId())
+                        .reason(reason)
+                        .build())
+        ));
+
+        log.info("[Order] Stock restore + cancelled events queued. orderId={}", order.getOrderId());
     }
 
     private String serialize(Object obj) {

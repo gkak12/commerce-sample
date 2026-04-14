@@ -1,6 +1,8 @@
 package com.commerce.order.kafka;
 
+import com.commerce.common.event.OrderCancelRequestedEvent;
 import com.commerce.common.event.OrderCreatedEvent;
+import com.commerce.common.event.PaymentCompletedEvent;
 import com.commerce.common.event.PaymentFailedEvent;
 import com.commerce.common.kafka.KafkaTopic;
 import com.commerce.order.service.OrderService;
@@ -29,8 +31,36 @@ public class OrderEventConsumer {
     }
 
     /**
+     * 사용자 직접 취소 요청
+     * bff-service가 order.cancel.requested 발행 → 취소 가능 상태 검증 후 cancelOrder()
+     */
+    @KafkaListener(
+            topics = KafkaTopic.ORDER_CANCEL_REQUESTED,
+            groupId = "order-service-group",
+            containerFactory = "kafkaListenerContainerFactory"
+    )
+    public void consumeOrderCancelRequested(OrderCancelRequestedEvent event) {
+        log.info("[Kafka] Order cancel requested. orderId={}, userId={}, reason={}",
+                event.getOrderId(), event.getUserId(), event.getReason());
+        orderService.cancelOrder(event.getOrderId(), event.getUserId(), event.getReason());
+    }
+
+    /**
+     * 결제 완료 → 주문 상태 COMPLETED 변경 + order.completed 발행
+     */
+    @KafkaListener(
+            topics = KafkaTopic.PAYMENT_COMPLETED,
+            groupId = "order-service-group",
+            containerFactory = "kafkaListenerContainerFactory"
+    )
+    public void consumePaymentCompleted(PaymentCompletedEvent event) {
+        log.info("[Kafka] Payment completed. Completing order. orderId={}", event.getOrderId());
+        orderService.completeOrder(event);
+    }
+
+    /**
      * Saga 보상 트랜잭션: 결제 실패 시 주문 취소
-     * payment-service가 payment.failed 발행 → 여기서 소비하여 주문을 CANCELLED로 변경
+     * payment-service가 payment.failed 발행 → 주문 CANCELLED + order.cancelled 발행
      */
     @KafkaListener(
             topics = KafkaTopic.PAYMENT_FAILED,
@@ -40,6 +70,6 @@ public class OrderEventConsumer {
     public void consumePaymentFailed(PaymentFailedEvent event) {
         log.warn("[Kafka][Saga] Payment failed. Cancelling order. orderId={}, reason={}",
                 event.getOrderId(), event.getReason());
-        orderService.cancelOrder(event.getOrderId());
+        orderService.cancelOrder(event.getOrderId(), event.getReason());
     }
 }
