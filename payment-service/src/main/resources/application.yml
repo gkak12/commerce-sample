@@ -46,6 +46,15 @@ toss:
 server:
   port: 8082
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus, metrics
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
 logging:
   pattern:
     console: "%d{HH:mm:ss.SSS} [%thread] [traceId=%X{traceId:-none}] [from=%X{sourceService:-none}] %-5level %logger{36} - %msg%n"

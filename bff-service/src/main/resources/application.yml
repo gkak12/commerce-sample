@@ -94,6 +94,15 @@ grpc:
       address: static://localhost:9093
       negotiation-type: plaintext
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus, metrics
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
 stock:
   snapshot:
     interval-ms: 30000   # Redis → DB 스냅샷 주기 (기본 30초)
