@@ -5,10 +5,12 @@ import com.commerce.bff.dto.auth.RefreshTokenRequest;
 import com.commerce.bff.dto.auth.SignupRequest;
 import com.commerce.bff.dto.auth.TokenResponse;
 import com.commerce.bff.service.AuthService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+@Tag(name = "회원가입/로그인", description = "회원가입/로그인 API")
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
