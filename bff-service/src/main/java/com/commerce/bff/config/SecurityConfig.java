@@ -45,7 +45,10 @@ public class SecurityConfig {
                     // Swagger UI
                     "/swagger-ui/**",
                     "/swagger-ui.html",
-                    "/v3/api-docs/**"
+                    "/v3/api-docs/**",
+                    // Prometheus 스크래핑 (인증 없이 접근 허용)
+                    "/actuator/prometheus",
+                    "/actuator/health"
                 ).permitAll()
                 // 재고 조회는 비로그인 사용자도 볼 수 있어야 함 (상품 목록 화면 등)
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/stocks/**").permitAll()
