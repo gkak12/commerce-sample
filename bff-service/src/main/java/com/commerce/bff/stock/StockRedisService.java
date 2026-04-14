@@ -5,7 +5,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -24,13 +26,24 @@ public class StockRedisService {
     private static final String STOCK_KEY_PREFIX = "stock:";
 
     private final RedisTemplate<String, String> redisTemplate;
+    private final ProductStockRepository productStockRepository;
 
     /**
      * 재고 초기화 (상품 등록 시 호출)
+     * Write-through: Redis + DB 동시 기록 (관리자 작업, 빈도 낮음)
      */
+    @Transactional
     public void initStock(String productId, long quantity) {
         String key = stockKey(productId);
         redisTemplate.opsForValue().set(key, String.valueOf(quantity));
+
+        // DB write-through: 초기화 시점은 항상 정확한 값을 DB에 기록
+        productStockRepository.findById(productId)
+                .ifPresentOrElse(
+                        stock -> stock.update(quantity, LocalDateTime.now()),
+                        () -> productStockRepository.save(new ProductStock(productId, quantity, LocalDateTime.now()))
+                );
+
         log.info("[Stock] Initialized. productId={}, quantity={}", productId, quantity);
     }
 
