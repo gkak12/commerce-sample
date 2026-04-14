@@ -82,6 +82,18 @@ jwt:
 server:
   port: 8080
 
+grpc:
+  client:
+    order-service:
+      address: static://localhost:9091
+      negotiation-type: plaintext   # 로컬 환경 TLS 없음 (운영은 TLS 적용)
+    point-service:
+      address: static://localhost:9094
+      negotiation-type: plaintext
+    delivery-service:
+      address: static://localhost:9093
+      negotiation-type: plaintext
+
 logging:
   pattern:
     console: "%d{HH:mm:ss.SSS} [%thread] [traceId=%X{traceId:-none}] %-5level %logger{36} - %msg%n"

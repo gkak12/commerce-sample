@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package commerce.point;
+
+option java_package = "com.commerce.grpc.point";
+option java_outer_classname = "PointQueryProto";
+option java_multiple_files = true;
+
+// 포인트 조회 서비스 — point-service gRPC 서버가 구현
+service PointQueryService {
+    rpc GetPointBalance (GetPointBalanceRequest) returns (GetPointBalanceResponse);
+}
+
+message GetPointBalanceRequest {
+    string user_id = 1;
+}
+
+message GetPointBalanceResponse {
+    bool   found       = 1;
+    string user_id     = 2;
+    int64  total_point = 3;
+}

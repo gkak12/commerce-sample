@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package commerce.order;
+
+option java_package = "com.commerce.grpc.order";
+option java_outer_classname = "OrderQueryProto";
+option java_multiple_files = true;
+
+// 주문 조회 서비스 — order-service gRPC 서버가 구현
+service OrderQueryService {
+    // 단건 주문 상태 조회
+    rpc GetOrderStatus (GetOrderStatusRequest) returns (GetOrderStatusResponse);
+    // 사용자 전체 주문 목록 조회
+    rpc GetOrderList (GetOrderListRequest) returns (GetOrderListResponse);
+}
+
+// ── GetOrderStatus ────────────────────────────────────────────────────────────
+message GetOrderStatusRequest {
+    string order_id = 1;
+    string user_id  = 2;   // 본인 주문인지 검증용
+}
+
+message GetOrderStatusResponse {
+    bool   found        = 1;
+    string order_id     = 2;
+    string status       = 3;
+    string total_amount = 4;
+    string created_at   = 5;
+    repeated OrderItemProto items = 6;
+}
+
+message OrderItemProto {
+    string product_id   = 1;
+    string product_name = 2;
+    int32  quantity     = 3;
+    string price        = 4;
+}
+
+// ── GetOrderList ──────────────────────────────────────────────────────────────
+message GetOrderListRequest {
+    string user_id = 1;
+}
+
+message OrderSummary {
+    string order_id     = 1;
+    string status       = 2;
+    string total_amount = 3;
+    string created_at   = 4;
+}
+
+message GetOrderListResponse {
+    repeated OrderSummary orders = 1;
+}

@@ -30,6 +30,9 @@ dependencies {
     annotationProcessor("jakarta.annotation:jakarta.annotation-api")
     annotationProcessor("jakarta.persistence:jakarta.persistence-api")
 
+    // gRPC 클라이언트 (order/point/delivery 서비스 조회)
+    implementation("net.devh:grpc-client-spring-boot-starter:3.1.0.RELEASE")
+
     runtimeOnly("com.mysql:mysql-connector-j")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.apache.commons:commons-pool2")

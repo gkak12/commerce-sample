@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package commerce.delivery;
+
+option java_package = "com.commerce.grpc.delivery";
+option java_outer_classname = "DeliveryQueryProto";
+option java_multiple_files = true;
+
+// 배송 조회 서비스 — delivery-service gRPC 서버가 구현
+service DeliveryQueryService {
+    rpc GetDeliveryStatus (GetDeliveryStatusRequest) returns (GetDeliveryStatusResponse);
+}
+
+message GetDeliveryStatusRequest {
+    string order_id = 1;
+    string user_id  = 2;   // 본인 주문인지 검증용
+}
+
+message GetDeliveryStatusResponse {
+    bool   found       = 1;
+    string delivery_id = 2;
+    string order_id    = 3;
+    string status      = 4;
+    string address     = 5;
+    string started_at  = 6;
+}
