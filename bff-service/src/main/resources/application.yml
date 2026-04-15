@@ -113,6 +113,7 @@ grpc:
     delivery-service:
       address: static://localhost:9093
       negotiation-type: plaintext
+  timeout-ms: 3000                  # gRPC 호출 타임아웃 (3초)
 
 management:
   endpoints:
