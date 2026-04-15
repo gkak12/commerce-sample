@@ -7,8 +7,11 @@ import com.commerce.common.kafka.KafkaTopic;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
+
+import java.time.Duration;
 
 /**
  * 주문 완료/취소 이메일 알림 Consumer
@@ -16,17 +19,21 @@ import org.springframework.stereotype.Component;
  * - order.completed → 주문 완료 메일 (order-service가 payment.completed 수신 후 발행)
  * - order.cancelled → 주문 취소 메일 (order-service가 payment.failed 수신 후 발행)
  *
- * payment 도메인 이벤트가 아닌 order 도메인 이벤트를 구독 → 도메인 경계 준수
- * order-service에서 상태 변경이 완료된 후 발행되므로 이메일 발송 시점 보장
+ * 도메인 경계: payment 도메인 이벤트가 아닌 order 도메인 이벤트를 구독
+ * 멱등성 처리: Redis에 처리된 orderId를 키로 저장 (7일 TTL) → 중복 메일 방지
  */
 @Component
 @RequiredArgsConstructor
 public class OrderNotificationConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(OrderNotificationConsumer.class);
+    private static final String COMPLETED_KEY_PREFIX = "idempotent:order-completed:";
+    private static final String CANCELLED_KEY_PREFIX = "idempotent:order-cancelled:";
+    private static final Duration IDEMPOTENT_TTL = Duration.ofDays(7);
 
     private final UserRepository userRepository;
     private final EmailService emailService;
+    private final RedisTemplate<String, String> redisTemplate;
 
     @KafkaListener(
             topics = KafkaTopic.ORDER_COMPLETED,
@@ -34,6 +41,15 @@ public class OrderNotificationConsumer {
             containerFactory = "kafkaListenerContainerFactory"
     )
     public void onOrderCompleted(OrderCompletedEvent event) {
+        String idempotentKey = COMPLETED_KEY_PREFIX + event.getOrderId();
+
+        // 멱등성 체크: 이미 처리된 이벤트면 무시 (중복 메일 방지)
+        Boolean isNew = redisTemplate.opsForValue().setIfAbsent(idempotentKey, "1", IDEMPOTENT_TTL);
+        if (Boolean.FALSE.equals(isNew)) {
+            log.warn("[Notification][Idempotent] 중복 order.completed 이벤트 무시. orderId={}", event.getOrderId());
+            return;
+        }
+
         log.info("[Notification] 주문 완료 이벤트 수신. orderId={}, userId={}", event.getOrderId(), event.getUserId());
 
         userRepository.findByUserId(event.getUserId())
@@ -54,6 +70,15 @@ public class OrderNotificationConsumer {
             containerFactory = "kafkaListenerContainerFactory"
     )
     public void onOrderCancelled(OrderCancelledEvent event) {
+        String idempotentKey = CANCELLED_KEY_PREFIX + event.getOrderId();
+
+        // 멱등성 체크: 이미 처리된 이벤트면 무시 (중복 메일 방지)
+        Boolean isNew = redisTemplate.opsForValue().setIfAbsent(idempotentKey, "1", IDEMPOTENT_TTL);
+        if (Boolean.FALSE.equals(isNew)) {
+            log.warn("[Notification][Idempotent] 중복 order.cancelled 이벤트 무시. orderId={}", event.getOrderId());
+            return;
+        }
+
         log.info("[Notification] 주문 취소 이벤트 수신. orderId={}, userId={}", event.getOrderId(), event.getUserId());
 
         userRepository.findByUserId(event.getUserId())
