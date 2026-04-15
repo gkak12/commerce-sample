@@ -38,10 +38,12 @@ public class OrderGrpcClient {
 
     @CircuitBreaker(name = "order-service", fallbackMethod = "getOrderListFallback")
     @Retry(name = "order-service")
-    public GetOrderListResponse getOrderList(String userId) {
-        log.debug("[gRPC-Client] getOrderList. userId={}", userId);
+    public GetOrderListResponse getOrderList(String userId, int page, int size) {
+        log.debug("[gRPC-Client] getOrderList. userId={}, page={}, size={}", userId, page, size);
         return orderStub.getOrderList(GetOrderListRequest.newBuilder()
                 .setUserId(userId)
+                .setPage(page)
+                .setSize(size)
                 .build());
     }
 
@@ -56,9 +58,9 @@ public class OrderGrpcClient {
                 .build();
     }
 
-    public GetOrderListResponse getOrderListFallback(String userId, Throwable t) {
+    public GetOrderListResponse getOrderListFallback(String userId, int page, int size, Throwable t) {
         log.warn("[CircuitBreaker] order-service getOrderList fallback. userId={}, reason={}", userId, t.getMessage());
         return GetOrderListResponse.newBuilder()
-                .build(); // orders 빈 리스트
+                .build();
     }
 }

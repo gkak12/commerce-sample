@@ -15,6 +15,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.LinkedHashMap;
@@ -42,13 +43,15 @@ public class MyPageController {
     @Operation(summary = "내 주문 목록", description = "order-service에 gRPC로 조회합니다.")
     @GetMapping("/orders")
     public ResponseEntity<Map<String, Object>> getMyOrders(
-            @AuthenticationPrincipal UserDetails userDetails) {
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestParam(defaultValue = "0")  int page,
+            @RequestParam(defaultValue = "10") int size) {
 
-        String userId = userDetails.getUsername();  // CustomUserDetails.getUsername() = userId
+        String userId = userDetails.getUsername();
 
-        List<OrderSummary> orders = orderGrpcClient.getOrderList(userId).getOrdersList();
+        var response = orderGrpcClient.getOrderList(userId, page, size);
 
-        List<Map<String, Object>> result = orders.stream()
+        List<Map<String, Object>> orders = response.getOrdersList().stream()
                 .map(o -> {
                     Map<String, Object> m = new LinkedHashMap<>();
                     m.put("orderId", o.getOrderId());
@@ -59,11 +62,14 @@ public class MyPageController {
                 })
                 .toList();
 
-        return ResponseEntity.ok(Map.of(
-                "userId", userId,
-                "totalCount", result.size(),
-                "orders", result
-        ));
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("userId", userId);
+        result.put("orders", orders);
+        result.put("currentPage", response.getCurrentPage());
+        result.put("totalCount", response.getTotalCount());
+        result.put("totalPages", response.getTotalPages());
+
+        return ResponseEntity.ok(result);
     }
 
     // ── 주문 상세 + 배송 상태 통합 조회 ────────────────────────────────────────

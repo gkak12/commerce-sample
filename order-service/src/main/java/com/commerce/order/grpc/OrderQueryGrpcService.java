@@ -15,6 +15,9 @@ import lombok.RequiredArgsConstructor;
 import net.devh.boot.grpc.server.service.GrpcService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -30,6 +33,8 @@ import java.util.List;
 public class OrderQueryGrpcService extends OrderQueryServiceGrpc.OrderQueryServiceImplBase {
 
     private static final Logger log = LoggerFactory.getLogger(OrderQueryGrpcService.class);
+    private static final int DEFAULT_PAGE_SIZE = 10;
+    private static final int MAX_PAGE_SIZE = 100;
 
     private final OrderRepository orderRepository;
 
@@ -41,7 +46,7 @@ public class OrderQueryGrpcService extends OrderQueryServiceGrpc.OrderQueryServi
         log.debug("[gRPC] getOrderStatus. orderId={}, userId={}", request.getOrderId(), request.getUserId());
 
         orderRepository.findById(request.getOrderId())
-                .filter(o -> o.getUserId().equals(request.getUserId()))  // 본인 주문 검증
+                .filter(o -> o.getUserId().equals(request.getUserId()))
                 .ifPresentOrElse(
                         order -> {
                             List<OrderItemProto> itemProtos = order.getOrderItems().stream()
@@ -65,16 +70,23 @@ public class OrderQueryGrpcService extends OrderQueryServiceGrpc.OrderQueryServi
         responseObserver.onCompleted();
     }
 
-    // ── 사용자 전체 주문 목록 조회 ─────────────────────────────────────────────
+    // ── 주문 목록 페이지네이션 조회 ────────────────────────────────────────────
     @Override
     @Transactional(readOnly = true)
     public void getOrderList(GetOrderListRequest request,
                              StreamObserver<GetOrderListResponse> responseObserver) {
-        log.debug("[gRPC] getOrderList. userId={}", request.getUserId());
 
-        List<Order> orders = orderRepository.findByUserIdOrderByCreatedAtDesc(request.getUserId());
+        int page = Math.max(request.getPage(), 0);
+        int size = (request.getSize() > 0)
+                ? Math.min(request.getSize(), MAX_PAGE_SIZE)
+                : DEFAULT_PAGE_SIZE;
 
-        List<OrderSummary> summaries = orders.stream()
+        log.debug("[gRPC] getOrderList. userId={}, page={}, size={}", request.getUserId(), page, size);
+
+        Pageable pageable = PageRequest.of(page, size);
+        Page<Order> orderPage = orderRepository.findByUserIdOrderByCreatedAtDesc(request.getUserId(), pageable);
+
+        List<OrderSummary> summaries = orderPage.getContent().stream()
                 .map(o -> OrderSummary.newBuilder()
                         .setOrderId(o.getOrderId())
                         .setStatus(o.getStatus().name())
@@ -85,6 +97,9 @@ public class OrderQueryGrpcService extends OrderQueryServiceGrpc.OrderQueryServi
 
         responseObserver.onNext(GetOrderListResponse.newBuilder()
                 .addAllOrders(summaries)
+                .setTotalCount((int) orderPage.getTotalElements())
+                .setTotalPages(orderPage.getTotalPages())
+                .setCurrentPage(orderPage.getNumber())
                 .build());
         responseObserver.onCompleted();
     }

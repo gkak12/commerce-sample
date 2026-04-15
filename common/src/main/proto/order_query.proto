@@ -39,6 +39,8 @@ message OrderItemProto {
 // ── GetOrderList ──────────────────────────────────────────────────────────────
 message GetOrderListRequest {
     string user_id = 1;
+    int32  page    = 2;   // 페이지 번호 (0부터 시작, 기본값 0)
+    int32  size    = 3;   // 페이지 크기 (기본값 10)
 }
 
 message OrderSummary {
@@ -49,5 +51,8 @@ message OrderSummary {
 }
 
 message GetOrderListResponse {
-    repeated OrderSummary orders = 1;
+    repeated OrderSummary orders      = 1;
+    int32                 total_count = 2;   // 전체 주문 수
+    int32                 total_pages = 3;   // 전체 페이지 수
+    int32                 current_page = 4;  // 현재 페이지 번호
 }
