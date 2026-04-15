@@ -136,6 +136,12 @@ public class KafkaConfig {
         return TopicBuilder.name(com.commerce.common.kafka.KafkaTopic.PAYMENT_FAILED).partitions(3).replicas(1).build();
     }
 
+    // ── DLT 토픽 명시적 생성 ──────────────────────────────────────────────────
+    @Bean
+    public org.apache.kafka.clients.admin.NewTopic orderConfirmedDltTopic() {
+        return TopicBuilder.name(com.commerce.common.kafka.KafkaTopic.ORDER_CONFIRMED_DLT).partitions(3).replicas(1).build();
+    }
+
     @Bean
     public CommonErrorHandler errorHandler() {
         DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(kafkaTemplate());

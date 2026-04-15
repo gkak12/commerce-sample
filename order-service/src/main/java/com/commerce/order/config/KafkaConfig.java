@@ -150,6 +150,21 @@ public class KafkaConfig {
     }
 
     @Bean
+    public org.apache.kafka.clients.admin.NewTopic orderCompletedTopic() {
+        return TopicBuilder.name(com.commerce.common.kafka.KafkaTopic.ORDER_COMPLETED).partitions(3).replicas(1).build();
+    }
+
+    @Bean
+    public org.apache.kafka.clients.admin.NewTopic orderCancelledTopic() {
+        return TopicBuilder.name(com.commerce.common.kafka.KafkaTopic.ORDER_CANCELLED).partitions(3).replicas(1).build();
+    }
+
+    @Bean
+    public org.apache.kafka.clients.admin.NewTopic orderCancelRequestedTopic() {
+        return TopicBuilder.name(com.commerce.common.kafka.KafkaTopic.ORDER_CANCEL_REQUESTED).partitions(3).replicas(1).build();
+    }
+
+    @Bean
     public org.apache.kafka.clients.admin.NewTopic paymentFailedTopic() {
         return TopicBuilder.name(com.commerce.common.kafka.KafkaTopic.PAYMENT_FAILED).partitions(3).replicas(1).build();
     }
@@ -157,6 +172,17 @@ public class KafkaConfig {
     @Bean
     public org.apache.kafka.clients.admin.NewTopic stockRestoreTopic() {
         return TopicBuilder.name(com.commerce.common.kafka.KafkaTopic.STOCK_RESTORE).partitions(3).replicas(1).build();
+    }
+
+    // ── DLT 토픽 명시적 생성 (auto-create 시 파티션 1개로 생성되는 문제 방지) ──
+    @Bean
+    public org.apache.kafka.clients.admin.NewTopic orderCreatedDltTopic() {
+        return TopicBuilder.name(com.commerce.common.kafka.KafkaTopic.ORDER_CREATED_DLT).partitions(3).replicas(1).build();
+    }
+
+    @Bean
+    public org.apache.kafka.clients.admin.NewTopic paymentFailedDltTopic() {
+        return TopicBuilder.name(com.commerce.common.kafka.KafkaTopic.PAYMENT_FAILED_DLT).partitions(3).replicas(1).build();
     }
 
     // ── 에러 핸들러 (지수 백오프 DLT) ─────────────────────────────────────────
