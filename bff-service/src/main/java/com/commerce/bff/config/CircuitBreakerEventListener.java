@@ -25,7 +25,7 @@ public class CircuitBreakerEventListener {
     private static final Logger log = LoggerFactory.getLogger(CircuitBreakerEventListener.class);
 
     private static final List<String> CIRCUIT_BREAKER_NAMES =
-            List.of("order-service", "point-service", "delivery-service");
+            List.of("order-service", "point-service", "delivery-service", "redis");
 
     private final CircuitBreakerRegistry circuitBreakerRegistry;
 
