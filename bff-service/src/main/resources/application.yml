@@ -111,7 +111,10 @@ management:
   endpoints:
     web:
       exposure:
-        include: health, info, prometheus, metrics
+        include: health, info, prometheus, metrics, circuitbreakers
+  health:
+    circuitbreakers:
+      enabled: true   # /actuator/health 에서 서킷 상태 확인 가능
   metrics:
     tags:
       application: ${spring.application.name}
@@ -119,6 +122,34 @@ management:
 stock:
   snapshot:
     interval-ms: 30000   # Redis → DB 스냅샷 주기 (기본 30초)
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      order-service:
+        sliding-window-size: 10               # 최근 10번의 호출로 상태 판단
+        failure-rate-threshold: 50            # 실패율 50% 이상이면 서킷 오픈
+        slow-call-duration-threshold: 3s      # 3초 이상이면 느린 호출로 간주
+        slow-call-rate-threshold: 50          # 느린 호출 50% 이상이면 서킷 오픈
+        wait-duration-in-open-state: 10s      # 서킷 오픈 후 10초 대기 후 Half-Open
+        permitted-number-of-calls-in-half-open-state: 3
+        register-health-indicator: true
+      point-service:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        slow-call-duration-threshold: 3s
+        slow-call-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        register-health-indicator: true
+      delivery-service:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        slow-call-duration-threshold: 3s
+        slow-call-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        register-health-indicator: true
 
 logging:
   pattern:
