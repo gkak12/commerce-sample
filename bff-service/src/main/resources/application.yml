@@ -126,6 +126,12 @@ stock:
 resilience4j:
   circuitbreaker:
     instances:
+      redis:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        register-health-indicator: true
       order-service:
         sliding-window-size: 10               # 최근 10번의 호출로 상태 판단
         failure-rate-threshold: 50            # 실패율 50% 이상이면 서킷 오픈
@@ -150,6 +156,36 @@ resilience4j:
         wait-duration-in-open-state: 10s
         permitted-number-of-calls-in-half-open-state: 3
         register-health-indicator: true
+
+  retry:
+    instances:
+      order-service:
+        max-attempts: 3                       # 최초 1번 + 재시도 2번
+        wait-duration: 500ms                  # 재시도 간격 500ms
+        enable-exponential-backoff: true      # 재시도마다 대기시간 증가 (500ms → 1s → 2s)
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - io.grpc.StatusRuntimeException    # gRPC 호출 실패 시 재시도
+      point-service:
+        max-attempts: 3
+        wait-duration: 500ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - io.grpc.StatusRuntimeException
+      delivery-service:
+        max-attempts: 3
+        wait-duration: 500ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - io.grpc.StatusRuntimeException
+      redis:
+        max-attempts: 2                       # 최초 1번 + 재시도 1번 (재고 작업은 빠르게 판단)
+        wait-duration: 200ms
+        retry-exceptions:
+          - org.springframework.data.redis.RedisConnectionFailureException
+          - io.lettuce.core.RedisConnectionException
 
 logging:
   pattern:

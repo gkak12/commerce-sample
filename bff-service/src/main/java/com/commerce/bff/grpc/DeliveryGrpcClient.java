@@ -4,6 +4,7 @@ import com.commerce.grpc.delivery.DeliveryQueryServiceGrpc;
 import com.commerce.grpc.delivery.GetDeliveryStatusRequest;
 import com.commerce.grpc.delivery.GetDeliveryStatusResponse;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import net.devh.boot.grpc.client.inject.GrpcClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,6 +24,7 @@ public class DeliveryGrpcClient {
     private DeliveryQueryServiceGrpc.DeliveryQueryServiceBlockingStub deliveryStub;
 
     @CircuitBreaker(name = "delivery-service", fallbackMethod = "getDeliveryStatusFallback")
+    @Retry(name = "delivery-service")
     public GetDeliveryStatusResponse getDeliveryStatus(String orderId, String userId) {
         log.debug("[gRPC-Client] getDeliveryStatus. orderId={}", orderId);
         return deliveryStub.getDeliveryStatus(GetDeliveryStatusRequest.newBuilder()

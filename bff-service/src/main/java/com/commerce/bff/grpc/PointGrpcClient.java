@@ -4,6 +4,7 @@ import com.commerce.grpc.point.GetPointBalanceRequest;
 import com.commerce.grpc.point.GetPointBalanceResponse;
 import com.commerce.grpc.point.PointQueryServiceGrpc;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import net.devh.boot.grpc.client.inject.GrpcClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,6 +24,7 @@ public class PointGrpcClient {
     private PointQueryServiceGrpc.PointQueryServiceBlockingStub pointStub;
 
     @CircuitBreaker(name = "point-service", fallbackMethod = "getPointBalanceFallback")
+    @Retry(name = "point-service")
     public GetPointBalanceResponse getPointBalance(String userId) {
         log.debug("[gRPC-Client] getPointBalance. userId={}", userId);
         return pointStub.getPointBalance(GetPointBalanceRequest.newBuilder()
