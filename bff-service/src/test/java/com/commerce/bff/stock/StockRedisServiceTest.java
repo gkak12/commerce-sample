@@ -12,6 +12,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
@@ -25,6 +26,9 @@ class StockRedisServiceTest {
 
     @Mock
     ValueOperations<String, String> valueOperations;
+
+    @Mock
+    ProductStockRepository productStockRepository;
 
     @InjectMocks
     StockRedisService stockRedisService;
@@ -151,9 +155,16 @@ class StockRedisServiceTest {
         @Test
         @DisplayName("initStock 호출 시 Redis set 실행")
         void initStock_setsValue() {
+            // given
+            when(productStockRepository.findById("product-A")).thenReturn(Optional.empty());
+
+            // when
             stockRedisService.initStock("product-A", 100L);
 
-            verify(valueOperations).set("stock:product-A", "100");
+            // then
+            verify(valueOperations).set(eq("stock:product-A"), eq("100"));
+            verify(productStockRepository).findById("product-A");
+            verify(productStockRepository).save(any(ProductStock.class));
         }
 
         @Test
