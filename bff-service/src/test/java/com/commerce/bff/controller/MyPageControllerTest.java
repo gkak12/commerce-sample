@@ -22,10 +22,7 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@WebMvcTest(
-    controllers = MyPageController.class,
-    excludeAutoConfiguration = {SecurityAutoConfiguration.class, SecurityFilterAutoConfiguration.class}
-)
+@WebMvcTest(controllers = MyPageController.class) // 보안 설정을 제외하지 않습니다.
 @DisplayName("MyPageController 단위 테스트")
 class MyPageControllerTest {
 
@@ -60,9 +57,12 @@ class MyPageControllerTest {
                         .setTotalAmount("25000")
                         .setCreatedAt("2024-01-02T11:00:00")
                         .build())
+                .setTotalCount(2)
+                .setTotalPages(1)
+                .setCurrentPage(0)
                 .build();
 
-        when(orderGrpcClient.getOrderList("user-001")).thenReturn(grpcResp);
+        when(orderGrpcClient.getOrderList("user-001", 0, 10)).thenReturn(grpcResp);
 
         mockMvc.perform(get("/api/my/orders"))
                 .andExpect(status().isOk())
@@ -76,7 +76,7 @@ class MyPageControllerTest {
     @WithMockUser(username = "user-001")
     @DisplayName("내 주문 목록 - 주문 없으면 빈 배열 반환")
     void getMyOrders_empty() throws Exception {
-        when(orderGrpcClient.getOrderList("user-001"))
+        when(orderGrpcClient.getOrderList("user-001", 0, 10))
                 .thenReturn(GetOrderListResponse.newBuilder().build());
 
         mockMvc.perform(get("/api/my/orders"))
