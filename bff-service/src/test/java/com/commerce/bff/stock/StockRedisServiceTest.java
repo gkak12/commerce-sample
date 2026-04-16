@@ -80,7 +80,7 @@ class StockRedisServiceTest {
             // product-A는 롤백되어야 함
             verify(valueOperations).increment("stock:product-A", 1L);
             // product-B는 차감도 못 했으므로 rollback 없음
-            verify(valueOperations, never()).increment("stock:product-B", anyLong());
+            verify(valueOperations, never()).increment(eq("stock:product-B"), anyLong());
         }
 
         @Test
@@ -99,7 +99,7 @@ class StockRedisServiceTest {
             assertThat(result).isFalse();
             verify(valueOperations).increment("stock:product-A", 2L);
             verify(valueOperations).increment("stock:product-B", 3L);
-            verify(valueOperations, never()).increment("stock:product-C", anyLong());
+            verify(valueOperations, never()).increment(eq("stock:product-C"), anyLong());
         }
 
         @Test
