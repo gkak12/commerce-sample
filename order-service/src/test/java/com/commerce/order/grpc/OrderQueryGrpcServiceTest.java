@@ -17,8 +17,11 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -47,6 +50,7 @@ class OrderQueryGrpcServiceTest {
                 .totalAmount(new BigDecimal("15000"))
                 .status(OrderStatus.CONFIRMED)
                 .build();
+        order.setCreatedAt(LocalDateTime.now());    // BaseEntity로부터 상속받은 Setter 사용
 
         when(orderRepository.findById("order-1")).thenReturn(Optional.of(order));
 
@@ -122,6 +126,7 @@ class OrderQueryGrpcServiceTest {
                 .totalAmount(new BigDecimal("20000"))
                 .status(OrderStatus.CONFIRMED)
                 .build();
+        order.setCreatedAt(LocalDateTime.now());    // BaseEntity로부터 상속받은 Setter 사용
 
         OrderItem item = OrderItem.builder()
                 .order(order)
@@ -130,6 +135,8 @@ class OrderQueryGrpcServiceTest {
                 .quantity(2)
                 .price(new BigDecimal("10000"))
                 .build();
+        item.setCreatedAt(LocalDateTime.now()); // BaseEntity로부터 상속받은 Setter 사용
+
         order.getOrderItems().add(item);
 
         when(orderRepository.findById("order-1")).thenReturn(Optional.of(order));
@@ -152,14 +159,18 @@ class OrderQueryGrpcServiceTest {
     @Test
     @DisplayName("사용자 주문 목록 조회 - 2건 반환")
     void getOrderList_returnsMultipleOrders() {
-        List<Order> orders = List.of(
-                Order.builder().orderId("order-1").userId("user-1")
-                        .totalAmount(new BigDecimal("10000")).status(OrderStatus.CONFIRMED).build(),
-                Order.builder().orderId("order-2").userId("user-1")
-                        .totalAmount(new BigDecimal("25000")).status(OrderStatus.DELIVERING).build()
-        );
+        Order order1 = Order.builder().orderId("order-1").userId("user-1")
+                .totalAmount(new BigDecimal("10000")).status(OrderStatus.CONFIRMED).build();
+        order1.setCreatedAt(LocalDateTime.now()); // BaseEntity로부터 상속받은 Setter 사용
 
-        when(orderRepository.findByUserIdOrderByCreatedAtDesc("user-1")).thenReturn(orders);
+        Order order2 = Order.builder().orderId("order-2").userId("user-1")
+                .totalAmount(new BigDecimal("25000")).status(OrderStatus.DELIVERING).build();
+        order2.setCreatedAt(LocalDateTime.now()); // BaseEntity로부터 상속받은 Setter 사용
+
+        List<Order> orders = List.of(order1, order2);
+
+        when(orderRepository.findByUserIdOrderByCreatedAtDesc(eq("user-1"), any(PageRequest.class)))
+                .thenReturn(new PageImpl<>(orders));
 
         StreamObserver<GetOrderListResponse> observer = mock(StreamObserver.class);
         ArgumentCaptor<GetOrderListResponse> captor = ArgumentCaptor.forClass(GetOrderListResponse.class);
@@ -181,7 +192,8 @@ class OrderQueryGrpcServiceTest {
     @Test
     @DisplayName("주문 없는 사용자 → 빈 목록 반환")
     void getOrderList_noOrders_returnsEmpty() {
-        when(orderRepository.findByUserIdOrderByCreatedAtDesc("user-999")).thenReturn(List.of());
+        when(orderRepository.findByUserIdOrderByCreatedAtDesc(eq("user-999"), any(PageRequest.class)))
+                .thenReturn(new PageImpl<>(List.of()));
 
         StreamObserver<GetOrderListResponse> observer = mock(StreamObserver.class);
         ArgumentCaptor<GetOrderListResponse> captor = ArgumentCaptor.forClass(GetOrderListResponse.class);
