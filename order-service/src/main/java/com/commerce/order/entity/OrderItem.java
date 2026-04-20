@@ -10,17 +10,14 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 import java.math.BigDecimal;
 
 @Entity
 @Table(name = "order_items")
 @Getter
-@Setter
 @NoArgsConstructor
 public class OrderItem extends BaseEntity {
 
@@ -44,8 +41,8 @@ public class OrderItem extends BaseEntity {
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal price;
 
-    @Builder
-    public OrderItem(Order order, String productId, String productName, int quantity, BigDecimal price) {
+    // package-private: Order.addItem()을 통해서만 생성 가능
+    OrderItem(Order order, String productId, String productName, int quantity, BigDecimal price) {
         this.order = order;
         this.productId = productId;
         this.productName = productName;

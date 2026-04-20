@@ -8,7 +8,6 @@ import com.commerce.common.event.PaymentCompletedEvent;
 import com.commerce.common.event.StockRestoreEvent;
 import com.commerce.common.kafka.KafkaTopic;
 import com.commerce.order.entity.Order;
-import com.commerce.order.entity.OrderItem;
 import com.commerce.order.entity.OrderStatus;
 import com.commerce.order.outbox.OutboxEvent;
 import com.commerce.order.outbox.OutboxEventRepository;
@@ -51,18 +50,14 @@ public class OrderServiceImpl implements OrderService {
                 .status(OrderStatus.CONFIRMED)
                 .build();
 
-        List<OrderItem> orderItems = event.getItems().stream()
-                .map(item -> OrderItem.builder()
-                        .order(order)
-                        .productId(item.getProductId())
-                        .productName(item.getProductName())
-                        .quantity(item.getQuantity())
-                        .price(item.getPrice())
-                        .build())
-                .collect(Collectors.toList());
+        // Order가 직접 아이템 생성 → 양방향 관계 Order 내부에서 처리
+        event.getItems().forEach(item ->
+                order.addItem(item.getProductId(), item.getProductName(),
+                              item.getQuantity(), item.getPrice()));
 
         orderRepository.save(order);
-        log.info("[Order] Order saved. orderId={}, userId={}", order.getOrderId(), order.getUserId());
+        log.info("[Order] Order saved. orderId={}, userId={}, itemCount={}",
+                order.getOrderId(), order.getUserId(), order.getOrderItems().size());
 
         // Outbox: order.confirmed 발행
         OrderConfirmedEvent confirmedEvent = OrderConfirmedEvent.builder()
@@ -87,7 +82,7 @@ public class OrderServiceImpl implements OrderService {
                 return;
             }
 
-            order.setStatus(OrderStatus.COMPLETED);
+            order.complete();
             log.info("[Order] Order completed. orderId={}, userId={}", order.getOrderId(), order.getUserId());
 
             // order.completed 발행 → 알림 서비스 구독
@@ -141,7 +136,7 @@ public class OrderServiceImpl implements OrderService {
     // ── private ──────────────────────────────────────────────────────────────
 
     private void cancelOrderInternal(Order order, String reason) {
-        order.setStatus(OrderStatus.CANCELLED);
+        order.cancel();
         log.info("[Order] Order cancelled. orderId={}, reason={}", order.getOrderId(), reason);
 
         List<StockRestoreEvent.StockItem> stockItems = order.getOrderItems().stream()
