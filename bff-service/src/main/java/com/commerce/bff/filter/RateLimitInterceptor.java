@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.core.Authentication;
@@ -89,12 +90,20 @@ public class RateLimitInterceptor implements HandlerInterceptor {
         long epochMinute = System.currentTimeMillis() / 60_000;
         String key = "rate:" + rule.category + ":" + identifier + ":" + epochMinute;
 
-        Long count = redisTemplate.opsForValue().increment(key);
-        if (count != null && count == 1L) {
-            redisTemplate.expire(key, WINDOW_TTL);
+        long currentCount;
+        try {
+            Long count = redisTemplate.opsForValue().increment(key);
+            if (count != null && count == 1L) {
+                redisTemplate.expire(key, WINDOW_TTL);
+            }
+            currentCount = count == null ? 1L : count;
+        } catch (DataAccessException e) {
+            // Fail Open: Redis 장애 시 요청 허용 (서비스 가용성 우선)
+            // Rate Limit 기능이 일시적으로 비활성화되더라도 정상 서비스가 더 중요
+            log.warn("[RateLimit] Redis 장애로 Rate Limit 우회. identifier={}, error={}",
+                    identifier, e.getMessage());
+            return true;
         }
-
-        long currentCount = count == null ? 1L : count;
 
         // ── 응답 헤더 설정 ──────────────────────────────────────────────────
         response.setIntHeader("X-RateLimit-Limit", rule.limit);
