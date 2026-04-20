@@ -19,6 +19,7 @@ import java.util.Map;
 public class OutboxEventPublisher {
 
     private static final Logger log = LoggerFactory.getLogger(OutboxEventPublisher.class);
+    private static final int MAX_RETRY_COUNT = 5; // 5회 초과 실패 시 수동 개입 필요
 
     private final OutboxEventRepository outboxEventRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
@@ -37,27 +38,48 @@ public class OutboxEventPublisher {
         this.transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
+    // ── PENDING 이벤트 발행 (5초마다) ─────────────────────────────────────────
+
     @Scheduled(fixedDelay = 5000)
     @SchedulerLock(name = "outbox_publisher_order", lockAtMostFor = "PT10S", lockAtLeastFor = "PT4S")
     public void publishPendingEvents() {
-        List<OutboxEvent> pendingEvents =
+        List<OutboxEvent> events =
                 outboxEventRepository.findTop100ByStatusOrderByCreatedAtAsc(OutboxStatus.PENDING);
+        processEvents(events);
+    }
 
-        if (pendingEvents.isEmpty()) return;
+    // ── FAILED 이벤트 재시도 (60초마다) ───────────────────────────────────────
+    // MAX_RETRY_COUNT 미만인 이벤트만 재시도 → 초과 시 수동 개입 대상
 
-        log.debug("[Outbox] Processing {} pending events", pendingEvents.size());
+    @Scheduled(fixedDelay = 60000)
+    @SchedulerLock(name = "outbox_retry_order", lockAtMostFor = "PT30S", lockAtLeastFor = "PT10S")
+    public void retryFailedEvents() {
+        List<OutboxEvent> events =
+                outboxEventRepository.findTop100ByStatusAndRetryCountLessThanOrderByCreatedAtAsc(
+                        OutboxStatus.FAILED, MAX_RETRY_COUNT);
 
-        for (OutboxEvent event : pendingEvents) {
+        if (!events.isEmpty()) {
+            log.info("[Outbox][Retry] FAILED 이벤트 재시도. count={}", events.size());
+        }
+        processEvents(events);
+    }
+
+    // ── 공통 처리 로직 ─────────────────────────────────────────────────────────
+
+    private void processEvents(List<OutboxEvent> events) {
+        if (events.isEmpty()) return;
+
+        log.debug("[Outbox] Processing {} events", events.size());
+
+        for (OutboxEvent event : events) {
             try {
                 Map<String, Object> payload = objectMapper.readValue(event.getPayload(), new TypeReference<>() {});
 
-                // EOS: Kafka 트랜잭션으로 정확히 한 번 발행 보장
                 kafkaTemplate.executeInTransaction(ops -> {
                     ops.send(event.getTopic(), event.getAggregateId(), payload);
                     return null;
                 });
 
-                // Kafka 발행 성공 후 별도 DB 트랜잭션으로 상태 업데이트
                 transactionTemplate.execute(status -> {
                     outboxEventRepository.findById(event.getId()).ifPresent(e -> {
                         e.markPublished();
@@ -70,12 +92,16 @@ public class OutboxEventPublisher {
                         event.getTopic(), event.getAggregateId(), event.getId());
 
             } catch (Exception e) {
-                log.error("[Outbox] Failed to publish. id={}, topic={}, retry={}",
+                log.error("[Outbox] Failed to publish. id={}, topic={}, retryCount={}",
                         event.getId(), event.getTopic(), event.getRetryCount(), e);
 
                 transactionTemplate.execute(status -> {
                     outboxEventRepository.findById(event.getId()).ifPresent(ev -> {
                         ev.markFailed();
+                        if (ev.getRetryCount() >= MAX_RETRY_COUNT) {
+                            log.error("[Outbox] 최대 재시도 횟수 초과. 수동 개입 필요. id={}, topic={}",
+                                    ev.getId(), ev.getTopic());
+                        }
                         outboxEventRepository.save(ev);
                     });
                     return null;

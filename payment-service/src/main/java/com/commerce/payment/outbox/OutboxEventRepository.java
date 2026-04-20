@@ -7,4 +7,7 @@ import java.util.List;
 public interface OutboxEventRepository extends JpaRepository<OutboxEvent, String> {
 
     List<OutboxEvent> findTop100ByStatusOrderByCreatedAtAsc(OutboxStatus status);
+
+    List<OutboxEvent> findTop100ByStatusAndRetryCountLessThanOrderByCreatedAtAsc(
+            OutboxStatus status, int maxRetryCount);
 }
