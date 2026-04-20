@@ -9,7 +9,6 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -18,8 +17,6 @@ import lombok.NoArgsConstructor;
 @Table(name = "points")
 @Getter
 @NoArgsConstructor
-@AllArgsConstructor
-@Builder
 public class Point extends BaseEntity {
 
     @Id
@@ -38,4 +35,13 @@ public class Point extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private PointType type;
+
+    @Builder
+    public Point(String userId, String orderId, Long earnedPoint, PointType type) {
+        this.userId = userId;
+        this.orderId = orderId;
+        this.earnedPoint = earnedPoint;
+        this.type = type;
+        // id는 DB auto-increment → 빌더에서 제외
+    }
 }

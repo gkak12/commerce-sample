@@ -52,13 +52,13 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         String paymentId = UUID.randomUUID().toString();
-        paymentRepository.save(new Payment(
-                paymentId,
-                event.getOrderId(),
-                event.getUserId(),
-                event.getTotalAmount(),
-                PaymentStatus.PENDING
-        ));
+        paymentRepository.save(Payment.builder()
+                .paymentId(paymentId)
+                .orderId(event.getOrderId())
+                .userId(event.getUserId())
+                .amount(event.getTotalAmount())
+                .status(PaymentStatus.PENDING)
+                .build());
         log.info("[Payment] Pending payment created. paymentId={}, orderId={}", paymentId, event.getOrderId());
     }
 

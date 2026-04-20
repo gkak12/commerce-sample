@@ -3,8 +3,8 @@ package com.commerce.delivery.service.impl;
 import com.commerce.common.event.DeliveryStartedEvent;
 import com.commerce.common.event.PaymentCompletedEvent;
 import com.commerce.common.kafka.KafkaTopic;
+import com.commerce.delivery.dto.DeliveryResponse;
 import com.commerce.delivery.entity.Delivery;
-import com.commerce.delivery.entity.DeliveryStatus;
 import com.commerce.delivery.outbox.OutboxEvent;
 import com.commerce.delivery.outbox.OutboxEventRepository;
 import com.commerce.delivery.repository.DeliveryRepository;
@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -29,8 +30,20 @@ public class DeliveryServiceImpl implements DeliveryService {
     private final OutboxEventRepository outboxEventRepository;
     private final ObjectMapper objectMapper;
 
-    @Transactional
+    // ── 쿼리 ─────────────────────────────────────────────────────────────────
+
     @Override
+    @Transactional(readOnly = true)
+    public Optional<DeliveryResponse> getDelivery(String orderId, String userId) {
+        return deliveryRepository.findByOrderId(orderId)
+                .filter(d -> d.getUserId().equals(userId))
+                .map(DeliveryResponse::from);
+    }
+
+    // ── 커맨드 ────────────────────────────────────────────────────────────────
+
+    @Override
+    @Transactional
     public void startDelivery(PaymentCompletedEvent event) {
         // 멱등성 체크
         if (deliveryRepository.existsByOrderId(event.getOrderId())) {
@@ -46,22 +59,20 @@ public class DeliveryServiceImpl implements DeliveryService {
                 .orderId(event.getOrderId())
                 .userId(event.getUserId())
                 .address(address)
-                .status(DeliveryStatus.STARTED)
-                .build();
+                .build();   // status = STARTED 생성자에서 고정
 
         deliveryRepository.save(delivery);
         log.info("[Delivery] Delivery started. deliveryId={}, orderId={}", deliveryId, event.getOrderId());
 
-        // Outbox 패턴: delivery.started 이벤트 적재
-        DeliveryStartedEvent startedEvent = DeliveryStartedEvent.builder()
-                .deliveryId(deliveryId)
-                .orderId(event.getOrderId())
-                .userId(event.getUserId())
-                .address(address)
-                .build();
-
         outboxEventRepository.save(OutboxEvent.create(
-                event.getOrderId(), KafkaTopic.DELIVERY_STARTED, serialize(startedEvent)));
+                event.getOrderId(),
+                KafkaTopic.DELIVERY_STARTED,
+                serialize(DeliveryStartedEvent.builder()
+                        .deliveryId(deliveryId)
+                        .orderId(event.getOrderId())
+                        .userId(event.getUserId())
+                        .address(address)
+                        .build())));
     }
 
     private String serialize(Object obj) {

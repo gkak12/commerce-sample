@@ -1,6 +1,7 @@
 package com.commerce.delivery.grpc;
 
-import com.commerce.delivery.repository.DeliveryRepository;
+import com.commerce.delivery.dto.DeliveryResponse;
+import com.commerce.delivery.service.DeliveryService;
 import com.commerce.grpc.delivery.DeliveryQueryServiceGrpc;
 import com.commerce.grpc.delivery.GetDeliveryStatusRequest;
 import com.commerce.grpc.delivery.GetDeliveryStatusResponse;
@@ -9,7 +10,6 @@ import lombok.RequiredArgsConstructor;
 import net.devh.boot.grpc.server.service.GrpcService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 배송 상태 조회 gRPC 서버
@@ -22,31 +22,32 @@ public class DeliveryQueryGrpcService extends DeliveryQueryServiceGrpc.DeliveryQ
 
     private static final Logger log = LoggerFactory.getLogger(DeliveryQueryGrpcService.class);
 
-    private final DeliveryRepository deliveryRepository;
+    private final DeliveryService deliveryService;
 
     @Override
-    @Transactional(readOnly = true)
     public void getDeliveryStatus(GetDeliveryStatusRequest request,
                                   StreamObserver<GetDeliveryStatusResponse> responseObserver) {
         log.debug("[gRPC] getDeliveryStatus. orderId={}, userId={}", request.getOrderId(), request.getUserId());
 
-        // orderId로 배송 조회 후 userId 일치 검증
-        deliveryRepository.findByOrderId(request.getOrderId())
-                .filter(d -> d.getUserId().equals(request.getUserId()))
+        deliveryService.getDelivery(request.getOrderId(), request.getUserId())
                 .ifPresentOrElse(
-                        delivery -> responseObserver.onNext(GetDeliveryStatusResponse.newBuilder()
-                                .setFound(true)
-                                .setDeliveryId(delivery.getDeliveryId())
-                                .setOrderId(delivery.getOrderId())
-                                .setStatus(delivery.getStatus().name())
-                                .setAddress(delivery.getAddress())
-                                .setStartedAt(delivery.getCreatedAt().toString())
-                                .build()),
+                        delivery -> responseObserver.onNext(toResponse(delivery)),
                         () -> responseObserver.onNext(GetDeliveryStatusResponse.newBuilder()
                                 .setFound(false)
                                 .build())
                 );
 
         responseObserver.onCompleted();
+    }
+
+    private GetDeliveryStatusResponse toResponse(DeliveryResponse delivery) {
+        return GetDeliveryStatusResponse.newBuilder()
+                .setFound(true)
+                .setDeliveryId(delivery.deliveryId())
+                .setOrderId(delivery.orderId())
+                .setStatus(delivery.status())
+                .setAddress(delivery.address())
+                .setStartedAt(delivery.createdAt().toString())
+                .build();
     }
 }

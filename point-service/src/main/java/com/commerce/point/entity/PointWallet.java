@@ -5,17 +5,13 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 @Entity
 @Table(name = "point_wallets")
 @Getter
-@Setter
 @NoArgsConstructor
-@AllArgsConstructor
 public class PointWallet extends BaseEntity {
 
     @Id
@@ -24,6 +20,13 @@ public class PointWallet extends BaseEntity {
 
     @Column(nullable = false)
     private long totalPoint;
+
+    public PointWallet(String userId) {
+        this.userId = userId;
+        this.totalPoint = 0L;   // 초기 잔액 고정
+    }
+
+    // ── 상태 변경 비즈니스 메서드 ─────────────────────────────────────────────
 
     public void earn(long point) {
         this.totalPoint += point;

@@ -7,19 +7,14 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 @Entity
 @Table(name = "deliveries")
 @Getter
-@Setter
 @NoArgsConstructor
-@AllArgsConstructor
-@Builder
 public class Delivery extends BaseEntity {
 
     @Id
@@ -37,5 +32,28 @@ public class Delivery extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private DeliveryStatus status = DeliveryStatus.STARTED;
+    private DeliveryStatus status;
+
+    @Builder
+    public Delivery(String deliveryId, String orderId, String userId, String address) {
+        this.deliveryId = deliveryId;
+        this.orderId = orderId;
+        this.userId = userId;
+        this.address = address;
+        this.status = DeliveryStatus.STARTED;   // 초기 상태 고정
+    }
+
+    // ── 상태 변경 비즈니스 메서드 ─────────────────────────────────────────────
+
+    public void startTransit() {
+        this.status = DeliveryStatus.IN_TRANSIT;
+    }
+
+    public void complete() {
+        this.status = DeliveryStatus.DELIVERED;
+    }
+
+    public void fail() {
+        this.status = DeliveryStatus.FAILED;
+    }
 }

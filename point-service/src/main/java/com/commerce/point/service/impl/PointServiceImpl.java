@@ -3,6 +3,7 @@ package com.commerce.point.service.impl;
 import com.commerce.common.event.PaymentCompletedEvent;
 import com.commerce.common.event.PointEarnedEvent;
 import com.commerce.common.kafka.KafkaTopic;
+import com.commerce.point.dto.PointBalanceResponse;
 import com.commerce.point.entity.Point;
 import com.commerce.point.entity.PointType;
 import com.commerce.point.entity.PointWallet;
@@ -34,6 +35,18 @@ public class PointServiceImpl implements PointService {
     private final OutboxEventRepository outboxEventRepository;
     private final ObjectMapper objectMapper;
 
+    // ── 쿼리 ─────────────────────────────────────────────────────────────────
+
+    @Override
+    @Transactional(readOnly = true)
+    public PointBalanceResponse getPointBalance(String userId) {
+        return pointWalletRepository.findById(userId)
+                .map(PointBalanceResponse::from)
+                .orElse(new PointBalanceResponse(userId, 0L));
+    }
+
+    // ── 커맨드 ────────────────────────────────────────────────────────────────
+
     @Override
     @Transactional
     public void earnPoint(PaymentCompletedEvent event) {
@@ -46,7 +59,7 @@ public class PointServiceImpl implements PointService {
         long earnedPoint = (long) (event.getAmount().doubleValue() * POINT_RATE);
 
         PointWallet wallet = pointWalletRepository.findById(event.getUserId())
-                .orElseGet(() -> new PointWallet(event.getUserId(), 0L));
+                .orElseGet(() -> new PointWallet(event.getUserId()));
         wallet.earn(earnedPoint);
         pointWalletRepository.save(wallet);
 
@@ -60,17 +73,16 @@ public class PointServiceImpl implements PointService {
         log.info("[Point] Point earned. userId={}, earnedPoint={}, totalPoint={}",
                 event.getUserId(), earnedPoint, wallet.getTotalPoint());
 
-        // Outbox 패턴: point.earned 이벤트 적재
-        PointEarnedEvent earnedEvent = PointEarnedEvent.builder()
-                .pointId(UUID.randomUUID().toString())
-                .userId(event.getUserId())
-                .orderId(event.getOrderId())
-                .earnedPoint(earnedPoint)
-                .totalPoint(wallet.getTotalPoint())
-                .build();
-
         outboxEventRepository.save(OutboxEvent.create(
-                event.getOrderId(), KafkaTopic.POINT_EARNED, serialize(earnedEvent)));
+                event.getOrderId(),
+                KafkaTopic.POINT_EARNED,
+                serialize(PointEarnedEvent.builder()
+                        .pointId(UUID.randomUUID().toString())
+                        .userId(event.getUserId())
+                        .orderId(event.getOrderId())
+                        .earnedPoint(earnedPoint)
+                        .totalPoint(wallet.getTotalPoint())
+                        .build())));
     }
 
     private String serialize(Object obj) {

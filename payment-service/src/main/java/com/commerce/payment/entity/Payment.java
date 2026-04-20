@@ -7,15 +7,16 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import lombok.Builder;
 import lombok.Getter;
-import lombok.Setter;
+import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 
 @Entity
 @Table(name = "payments")
 @Getter
-@Setter
+@NoArgsConstructor
 public class Payment extends BaseEntity {
 
     @Id
@@ -33,7 +34,7 @@ public class Payment extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private PaymentStatus status = PaymentStatus.PENDING;
+    private PaymentStatus status;
 
     @Column(length = 200)
     private String tossPaymentKey;
@@ -44,16 +45,17 @@ public class Payment extends BaseEntity {
     @Column(length = 50)
     private String approvedAt;
 
-    protected Payment() {
-    }
-
-    public Payment(String paymentId, String orderId, String userId, BigDecimal amount, PaymentStatus status) {
+    @Builder
+    public Payment(String paymentId, String orderId, String userId,
+                   BigDecimal amount, PaymentStatus status) {
         this.paymentId = paymentId;
         this.orderId = orderId;
         this.userId = userId;
         this.amount = amount;
         this.status = status;
     }
+
+    // ── 상태 변경 비즈니스 메서드 ─────────────────────────────────────────────
 
     public void complete(String tossPaymentKey, String method, String approvedAt) {
         this.status = PaymentStatus.COMPLETED;
