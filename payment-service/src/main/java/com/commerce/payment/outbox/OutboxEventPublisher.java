@@ -2,6 +2,7 @@ package com.commerce.payment.outbox;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -37,6 +38,7 @@ public class OutboxEventPublisher {
     }
 
     @Scheduled(fixedDelay = 5000)
+    @SchedulerLock(name = "outbox_publisher_payment", lockAtMostFor = "PT10S", lockAtLeastFor = "PT4S")
     public void publishPendingEvents() {
         List<OutboxEvent> pendingEvents =
                 outboxEventRepository.findTop100ByStatusOrderByCreatedAtAsc(OutboxStatus.PENDING);

@@ -1,6 +1,7 @@
 package com.commerce.bff.stock;
 
 import lombok.RequiredArgsConstructor;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.Cursor;
@@ -33,6 +34,7 @@ public class StockSnapshotScheduler {
     private final ProductStockRepository productStockRepository;
 
     @Scheduled(fixedDelayString = "${stock.snapshot.interval-ms:30000}")
+    @SchedulerLock(name = "stock_snapshot", lockAtMostFor = "PT45S", lockAtLeastFor = "PT25S")
     @Transactional
     public void syncToDb() {
         List<ProductStock> snapshots = new ArrayList<>();

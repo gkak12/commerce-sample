@@ -56,6 +56,10 @@ dependencies {
     // Mail
     implementation("org.springframework.boot:spring-boot-starter-mail")
 
+    // Shedlock (분산 스케줄러 중복 실행 방지)
+    implementation("net.javacrumbs.shedlock:shedlock-spring:5.13.0")
+    implementation("net.javacrumbs.shedlock:shedlock-provider-jdbc-template:5.13.0")
+
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.security:spring-security-test")
     testImplementation("org.springframework.kafka:spring-kafka-test")
