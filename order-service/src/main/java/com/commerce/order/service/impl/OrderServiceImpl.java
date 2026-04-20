@@ -7,6 +7,7 @@ import com.commerce.common.event.OrderCreatedEvent;
 import com.commerce.common.event.PaymentCompletedEvent;
 import com.commerce.common.event.StockRestoreEvent;
 import com.commerce.common.kafka.KafkaTopic;
+import com.commerce.order.dto.OrderResponse;
 import com.commerce.order.entity.Order;
 import com.commerce.order.entity.OrderStatus;
 import com.commerce.order.outbox.OutboxEvent;
@@ -18,10 +19,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -33,6 +37,25 @@ public class OrderServiceImpl implements OrderService {
     private final OrderRepository orderRepository;
     private final OutboxEventRepository outboxEventRepository;
     private final ObjectMapper objectMapper;
+
+    // ── 쿼리 ─────────────────────────────────────────────────────────────────
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<OrderResponse> getOrder(String orderId, String userId) {
+        return orderRepository.findById(orderId)
+                .filter(o -> o.getUserId().equals(userId))
+                .map(OrderResponse::from);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<OrderResponse> getOrderList(String userId, Pageable pageable) {
+        return orderRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable)
+                .map(OrderResponse::from);
+    }
+
+    // ── 커맨드 ────────────────────────────────────────────────────────────────
 
     @Override
     @Transactional
@@ -60,16 +83,14 @@ public class OrderServiceImpl implements OrderService {
                 order.getOrderId(), order.getUserId(), order.getOrderItems().size());
 
         // Outbox: order.confirmed 발행
-        OrderConfirmedEvent confirmedEvent = OrderConfirmedEvent.builder()
-                .orderId(event.getOrderId())
-                .userId(event.getUserId())
-                .totalAmount(event.getTotalAmount())
-                .build();
-
         outboxEventRepository.save(OutboxEvent.create(
                 event.getOrderId(),
                 KafkaTopic.ORDER_CONFIRMED,
-                serialize(confirmedEvent)
+                serialize(OrderConfirmedEvent.builder()
+                        .orderId(event.getOrderId())
+                        .userId(event.getUserId())
+                        .totalAmount(event.getTotalAmount())
+                        .build())
         ));
     }
 
@@ -85,17 +106,14 @@ public class OrderServiceImpl implements OrderService {
             order.complete();
             log.info("[Order] Order completed. orderId={}, userId={}", order.getOrderId(), order.getUserId());
 
-            // order.completed 발행 → 알림 서비스 구독
-            OrderCompletedEvent completedEvent = OrderCompletedEvent.builder()
-                    .orderId(order.getOrderId())
-                    .userId(order.getUserId())
-                    .totalAmount(order.getTotalAmount())
-                    .build();
-
             outboxEventRepository.save(OutboxEvent.create(
                     order.getOrderId(),
                     KafkaTopic.ORDER_COMPLETED,
-                    serialize(completedEvent)
+                    serialize(OrderCompletedEvent.builder()
+                            .orderId(order.getOrderId())
+                            .userId(order.getUserId())
+                            .totalAmount(order.getTotalAmount())
+                            .build())
             ));
         });
     }
@@ -146,7 +164,6 @@ public class OrderServiceImpl implements OrderService {
                         .build())
                 .collect(Collectors.toList());
 
-        // stock.restore 발행 → bff-service Redis 재고 복구
         outboxEventRepository.save(OutboxEvent.create(
                 order.getOrderId(),
                 KafkaTopic.STOCK_RESTORE,
@@ -157,7 +174,6 @@ public class OrderServiceImpl implements OrderService {
                         .build())
         ));
 
-        // order.cancelled 발행 → 취소 이메일
         outboxEventRepository.save(OutboxEvent.create(
                 order.getOrderId(),
                 KafkaTopic.ORDER_CANCELLED,

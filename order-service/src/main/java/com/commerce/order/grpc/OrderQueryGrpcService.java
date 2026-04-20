@@ -7,9 +7,9 @@ import com.commerce.grpc.order.GetOrderStatusResponse;
 import com.commerce.grpc.order.OrderItemProto;
 import com.commerce.grpc.order.OrderQueryServiceGrpc;
 import com.commerce.grpc.order.OrderSummary;
-import com.commerce.order.entity.Order;
-import com.commerce.order.entity.OrderItem;
-import com.commerce.order.repository.OrderRepository;
+import com.commerce.order.dto.OrderItemResponse;
+import com.commerce.order.dto.OrderResponse;
+import com.commerce.order.service.OrderService;
 import io.grpc.stub.StreamObserver;
 import lombok.RequiredArgsConstructor;
 import net.devh.boot.grpc.server.service.GrpcService;
@@ -17,8 +17,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -36,32 +34,18 @@ public class OrderQueryGrpcService extends OrderQueryServiceGrpc.OrderQueryServi
     private static final int DEFAULT_PAGE_SIZE = 10;
     private static final int MAX_PAGE_SIZE = 100;
 
-    private final OrderRepository orderRepository;
+    private final OrderService orderService;
 
     // ── 단건 주문 상태 조회 ────────────────────────────────────────────────────
+
     @Override
-    @Transactional(readOnly = true)
     public void getOrderStatus(GetOrderStatusRequest request,
                                StreamObserver<GetOrderStatusResponse> responseObserver) {
         log.debug("[gRPC] getOrderStatus. orderId={}, userId={}", request.getOrderId(), request.getUserId());
 
-        orderRepository.findById(request.getOrderId())
-                .filter(o -> o.getUserId().equals(request.getUserId()))
+        orderService.getOrder(request.getOrderId(), request.getUserId())
                 .ifPresentOrElse(
-                        order -> {
-                            List<OrderItemProto> itemProtos = order.getOrderItems().stream()
-                                    .map(this::toItemProto)
-                                    .toList();
-
-                            responseObserver.onNext(GetOrderStatusResponse.newBuilder()
-                                    .setFound(true)
-                                    .setOrderId(order.getOrderId())
-                                    .setStatus(order.getStatus().name())
-                                    .setTotalAmount(order.getTotalAmount().toPlainString())
-                                    .setCreatedAt(order.getCreatedAt().toString())
-                                    .addAllItems(itemProtos)
-                                    .build());
-                        },
+                        order -> responseObserver.onNext(toStatusResponse(order)),
                         () -> responseObserver.onNext(GetOrderStatusResponse.newBuilder()
                                 .setFound(false)
                                 .build())
@@ -71,8 +55,8 @@ public class OrderQueryGrpcService extends OrderQueryServiceGrpc.OrderQueryServi
     }
 
     // ── 주문 목록 페이지네이션 조회 ────────────────────────────────────────────
+
     @Override
-    @Transactional(readOnly = true)
     public void getOrderList(GetOrderListRequest request,
                              StreamObserver<GetOrderListResponse> responseObserver) {
 
@@ -83,16 +67,11 @@ public class OrderQueryGrpcService extends OrderQueryServiceGrpc.OrderQueryServi
 
         log.debug("[gRPC] getOrderList. userId={}, page={}, size={}", request.getUserId(), page, size);
 
-        Pageable pageable = PageRequest.of(page, size);
-        Page<Order> orderPage = orderRepository.findByUserIdOrderByCreatedAtDesc(request.getUserId(), pageable);
+        Page<OrderResponse> orderPage = orderService.getOrderList(
+                request.getUserId(), PageRequest.of(page, size));
 
         List<OrderSummary> summaries = orderPage.getContent().stream()
-                .map(o -> OrderSummary.newBuilder()
-                        .setOrderId(o.getOrderId())
-                        .setStatus(o.getStatus().name())
-                        .setTotalAmount(o.getTotalAmount().toPlainString())
-                        .setCreatedAt(o.getCreatedAt().toString())
-                        .build())
+                .map(this::toSummary)
                 .toList();
 
         responseObserver.onNext(GetOrderListResponse.newBuilder()
@@ -104,12 +83,38 @@ public class OrderQueryGrpcService extends OrderQueryServiceGrpc.OrderQueryServi
         responseObserver.onCompleted();
     }
 
-    private OrderItemProto toItemProto(OrderItem item) {
+    // ── 변환 메서드 ───────────────────────────────────────────────────────────
+
+    private GetOrderStatusResponse toStatusResponse(OrderResponse order) {
+        List<OrderItemProto> itemProtos = order.items().stream()
+                .map(this::toItemProto)
+                .toList();
+
+        return GetOrderStatusResponse.newBuilder()
+                .setFound(true)
+                .setOrderId(order.orderId())
+                .setStatus(order.status())
+                .setTotalAmount(order.totalAmount().toPlainString())
+                .setCreatedAt(order.createdAt().toString())
+                .addAllItems(itemProtos)
+                .build();
+    }
+
+    private OrderSummary toSummary(OrderResponse order) {
+        return OrderSummary.newBuilder()
+                .setOrderId(order.orderId())
+                .setStatus(order.status())
+                .setTotalAmount(order.totalAmount().toPlainString())
+                .setCreatedAt(order.createdAt().toString())
+                .build();
+    }
+
+    private OrderItemProto toItemProto(OrderItemResponse item) {
         return OrderItemProto.newBuilder()
-                .setProductId(item.getProductId())
-                .setProductName(item.getProductName())
-                .setQuantity(item.getQuantity())
-                .setPrice(item.getPrice().toPlainString())
+                .setProductId(item.productId())
+                .setProductName(item.productName())
+                .setQuantity(item.quantity())
+                .setPrice(item.price().toPlainString())
                 .build();
     }
 }
