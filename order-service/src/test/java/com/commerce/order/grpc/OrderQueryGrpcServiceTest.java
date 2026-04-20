@@ -50,7 +50,6 @@ class OrderQueryGrpcServiceTest {
                 .totalAmount(new BigDecimal("15000"))
                 .status(OrderStatus.CONFIRMED)
                 .build();
-        order.setCreatedAt(LocalDateTime.now());    // BaseEntity로부터 상속받은 Setter 사용
 
         when(orderRepository.findById("order-1")).thenReturn(Optional.of(order));
 
@@ -126,7 +125,6 @@ class OrderQueryGrpcServiceTest {
                 .totalAmount(new BigDecimal("20000"))
                 .status(OrderStatus.CONFIRMED)
                 .build();
-        order.setCreatedAt(LocalDateTime.now());    // BaseEntity로부터 상속받은 Setter 사용
 
         order.addItem("prod-A", "상품A", 2, new BigDecimal("10000"));
 
@@ -152,11 +150,9 @@ class OrderQueryGrpcServiceTest {
     void getOrderList_returnsMultipleOrders() {
         Order order1 = Order.builder().orderId("order-1").userId("user-1")
                 .totalAmount(new BigDecimal("10000")).status(OrderStatus.CONFIRMED).build();
-        order1.setCreatedAt(LocalDateTime.now()); // BaseEntity로부터 상속받은 Setter 사용
 
         Order order2 = Order.builder().orderId("order-2").userId("user-1")
                 .totalAmount(new BigDecimal("25000")).status(OrderStatus.DELIVERING).build();
-        order2.setCreatedAt(LocalDateTime.now()); // BaseEntity로부터 상속받은 Setter 사용
 
         List<Order> orders = List.of(order1, order2);
 
