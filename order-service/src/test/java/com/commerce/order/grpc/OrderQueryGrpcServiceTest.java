@@ -128,16 +128,7 @@ class OrderQueryGrpcServiceTest {
                 .build();
         order.setCreatedAt(LocalDateTime.now());    // BaseEntity로부터 상속받은 Setter 사용
 
-        OrderItem item = OrderItem.builder()
-                .order(order)
-                .productId("prod-A")
-                .productName("상품A")
-                .quantity(2)
-                .price(new BigDecimal("10000"))
-                .build();
-        item.setCreatedAt(LocalDateTime.now()); // BaseEntity로부터 상속받은 Setter 사용
-
-        order.getOrderItems().add(item);
+        order.addItem("prod-A", "상품A", 2, new BigDecimal("10000"));
 
         when(orderRepository.findById("order-1")).thenReturn(Optional.of(order));
 
