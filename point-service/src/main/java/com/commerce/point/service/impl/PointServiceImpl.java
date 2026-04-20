@@ -5,6 +5,7 @@ import com.commerce.common.event.PointEarnedEvent;
 import com.commerce.common.kafka.KafkaTopic;
 import com.commerce.point.dto.PointBalanceResponse;
 import com.commerce.point.entity.Point;
+import com.commerce.point.mapper.PointMapper;
 import com.commerce.point.entity.PointType;
 import com.commerce.point.entity.PointWallet;
 import com.commerce.point.outbox.OutboxEvent;
@@ -34,6 +35,7 @@ public class PointServiceImpl implements PointService {
     private final PointWalletRepository pointWalletRepository;
     private final OutboxEventRepository outboxEventRepository;
     private final ObjectMapper objectMapper;
+    private final PointMapper pointMapper;
 
     // ── 쿼리 ─────────────────────────────────────────────────────────────────
 
@@ -41,7 +43,7 @@ public class PointServiceImpl implements PointService {
     @Transactional(readOnly = true)
     public PointBalanceResponse getPointBalance(String userId) {
         return pointWalletRepository.findById(userId)
-                .map(PointBalanceResponse::from)
+                .map(pointMapper::toResponse)
                 .orElse(new PointBalanceResponse(userId, 0L));
     }
 

@@ -14,6 +14,7 @@ import com.commerce.payment.dto.toss.TossWebhookRequest;
 import com.commerce.payment.entity.Payment;
 import com.commerce.payment.entity.PaymentStatus;
 import com.commerce.payment.exception.PaymentNotFoundException;
+import com.commerce.payment.mapper.PaymentMapper;
 import com.commerce.payment.outbox.OutboxEvent;
 import com.commerce.payment.outbox.OutboxEventRepository;
 import com.commerce.payment.repository.PaymentRepository;
@@ -38,6 +39,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final OutboxEventRepository outboxEventRepository;
     private final TossPaymentClient tossPaymentClient;
     private final ObjectMapper objectMapper;
+    private final PaymentMapper paymentMapper;
 
     /**
      * Kafka order.confirmed 이벤트 수신 → PENDING 결제 레코드 생성
@@ -94,14 +96,7 @@ public class PaymentServiceImpl implements PaymentService {
             outboxEventRepository.save(OutboxEvent.create(
                     payment.getOrderId(), KafkaTopic.PAYMENT_COMPLETED, serialize(completedEvent)));
 
-            return PaymentConfirmResponse.builder()
-                    .paymentId(payment.getPaymentId())
-                    .orderId(payment.getOrderId())
-                    .amount(payment.getAmount())
-                    .status(payment.getStatus().name())
-                    .method(payment.getMethod())
-                    .approvedAt(payment.getApprovedAt())
-                    .build();
+            return paymentMapper.toConfirmResponse(payment);
 
         } catch (Exception e) {
             // Saga 보상 트랜잭션: 결제 실패 → payment.failed 이벤트로 주문 취소 유도

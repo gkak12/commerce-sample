@@ -5,6 +5,7 @@ import com.commerce.common.event.PaymentCompletedEvent;
 import com.commerce.common.kafka.KafkaTopic;
 import com.commerce.delivery.dto.DeliveryResponse;
 import com.commerce.delivery.entity.Delivery;
+import com.commerce.delivery.mapper.DeliveryMapper;
 import com.commerce.delivery.outbox.OutboxEvent;
 import com.commerce.delivery.outbox.OutboxEventRepository;
 import com.commerce.delivery.repository.DeliveryRepository;
@@ -29,6 +30,7 @@ public class DeliveryServiceImpl implements DeliveryService {
     private final DeliveryRepository deliveryRepository;
     private final OutboxEventRepository outboxEventRepository;
     private final ObjectMapper objectMapper;
+    private final DeliveryMapper deliveryMapper;
 
     // ── 쿼리 ─────────────────────────────────────────────────────────────────
 
@@ -37,7 +39,7 @@ public class DeliveryServiceImpl implements DeliveryService {
     public Optional<DeliveryResponse> getDelivery(String orderId, String userId) {
         return deliveryRepository.findByOrderId(orderId)
                 .filter(d -> d.getUserId().equals(userId))
-                .map(DeliveryResponse::from);
+                .map(deliveryMapper::toResponse);
     }
 
     // ── 커맨드 ────────────────────────────────────────────────────────────────

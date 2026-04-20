@@ -10,6 +10,7 @@ import com.commerce.common.kafka.KafkaTopic;
 import com.commerce.order.dto.OrderResponse;
 import com.commerce.order.entity.Order;
 import com.commerce.order.entity.OrderStatus;
+import com.commerce.order.mapper.OrderMapper;
 import com.commerce.order.outbox.OutboxEvent;
 import com.commerce.order.outbox.OutboxEventRepository;
 import com.commerce.order.repository.OrderRepository;
@@ -37,6 +38,7 @@ public class OrderServiceImpl implements OrderService {
     private final OrderRepository orderRepository;
     private final OutboxEventRepository outboxEventRepository;
     private final ObjectMapper objectMapper;
+    private final OrderMapper orderMapper;
 
     // ── 쿼리 ─────────────────────────────────────────────────────────────────
 
@@ -45,14 +47,14 @@ public class OrderServiceImpl implements OrderService {
     public Optional<OrderResponse> getOrder(String orderId, String userId) {
         return orderRepository.findById(orderId)
                 .filter(o -> o.getUserId().equals(userId))
-                .map(OrderResponse::from);
+                .map(orderMapper::toResponse);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<OrderResponse> getOrderList(String userId, Pageable pageable) {
         return orderRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable)
-                .map(OrderResponse::from);
+                .map(orderMapper::toResponse);
     }
 
     // ── 커맨드 ────────────────────────────────────────────────────────────────
