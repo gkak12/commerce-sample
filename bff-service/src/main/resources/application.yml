@@ -136,6 +136,12 @@ cache:
     ttl-seconds: 3            # Mutex Lock TTL (gRPC 타임아웃과 동일하게 설정)
     wait-ms: 50               # 락 획득 실패 시 재조회 대기 시간
 
+rate-limit:
+  order-per-minute: 10        # 주문 생성/취소 (어뷰징 방지)
+  auth-login-per-minute: 10   # 로그인 (브루트포스 방지, IP 기준)
+  auth-signup-per-minute: 5   # 회원가입 (스팸 방지, IP 기준)
+  default-per-minute: 60      # 마이페이지 조회 등 일반 API
+
 stock:
   snapshot:
     interval-ms: 30000   # Redis → DB 스냅샷 주기 (기본 30초)
