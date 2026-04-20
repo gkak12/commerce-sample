@@ -127,6 +127,15 @@ management:
     tags:
       application: ${spring.application.name}
 
+cache:
+  ttl:
+    order-list-seconds: 30    # 주문 목록 캐시 TTL (주문/상태 변경이 잦아 짧게)
+    order-detail-seconds: 10  # 주문 상세 캐시 TTL (배송 상태 실시간성 중요)
+    point-seconds: 60         # 포인트 잔액 캐시 TTL (결제 시점에만 변경)
+  lock:
+    ttl-seconds: 3            # Mutex Lock TTL (gRPC 타임아웃과 동일하게 설정)
+    wait-ms: 50               # 락 획득 실패 시 재조회 대기 시간
+
 stock:
   snapshot:
     interval-ms: 30000   # Redis → DB 스냅샷 주기 (기본 30초)

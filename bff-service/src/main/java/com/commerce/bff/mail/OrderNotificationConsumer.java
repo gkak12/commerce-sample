@@ -1,5 +1,6 @@
 package com.commerce.bff.mail;
 
+import com.commerce.bff.cache.MyPageCacheService;
 import com.commerce.bff.repository.UserRepository;
 import com.commerce.common.event.OrderCancelledEvent;
 import com.commerce.common.event.OrderCompletedEvent;
@@ -16,10 +17,13 @@ import java.time.Duration;
 /**
  * 주문 완료/취소 이메일 알림 Consumer
  *
- * - order.completed → 주문 완료 메일 (order-service가 payment.completed 수신 후 발행)
- * - order.cancelled → 주문 취소 메일 (order-service가 payment.failed 수신 후 발행)
+ * - order.completed → 주문 완료 메일 + 캐시 evict
+ * - order.cancelled → 주문 취소 메일 + 캐시 evict
  *
- * 도메인 경계: payment 도메인 이벤트가 아닌 order 도메인 이벤트를 구독
+ * 캐시 무효화:
+ *   주문 상태 변경 이벤트 수신 시 해당 사용자의 주문 목록/상세 캐시를 즉시 삭제
+ *   → 다음 조회 시 최신 상태를 gRPC로 가져와 재캐싱
+ *
  * 멱등성 처리: Redis에 처리된 orderId를 키로 저장 (7일 TTL) → 중복 메일 방지
  */
 @Component
@@ -28,12 +32,13 @@ public class OrderNotificationConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(OrderNotificationConsumer.class);
     private static final String COMPLETED_KEY_PREFIX = "idempotent:order-completed:";
-    private static final String CANCELLED_KEY_PREFIX = "idempotent:order-cancelled:";
+    private static final String CANCELLED_KEY_PREFIX  = "idempotent:order-cancelled:";
     private static final Duration IDEMPOTENT_TTL = Duration.ofDays(7);
 
     private final UserRepository userRepository;
     private final EmailService emailService;
     private final RedisTemplate<String, String> redisTemplate;
+    private final MyPageCacheService cacheService;
 
     @KafkaListener(
             topics = KafkaTopic.ORDER_COMPLETED,
@@ -51,6 +56,9 @@ public class OrderNotificationConsumer {
         }
 
         log.info("[Notification] 주문 완료 이벤트 수신. orderId={}, userId={}", event.getOrderId(), event.getUserId());
+
+        // 캐시 무효화: 주문 상태가 COMPLETED로 변경됐으므로 이전 캐시 삭제
+        cacheService.evictOrderCaches(event.getUserId(), event.getOrderId());
 
         userRepository.findByUserId(event.getUserId())
                 .ifPresentOrElse(
@@ -80,6 +88,9 @@ public class OrderNotificationConsumer {
         }
 
         log.info("[Notification] 주문 취소 이벤트 수신. orderId={}, userId={}", event.getOrderId(), event.getUserId());
+
+        // 캐시 무효화: 주문 상태가 CANCELLED로 변경됐으므로 이전 캐시 삭제
+        cacheService.evictOrderCaches(event.getUserId(), event.getOrderId());
 
         userRepository.findByUserId(event.getUserId())
                 .ifPresentOrElse(
