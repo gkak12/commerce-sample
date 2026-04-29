@@ -1,2 +1,7 @@
 cookie:
   secure: true    # 운영 환경 (HTTPS 필수) — Refresh Token Cookie HTTPS 전송만 허용
+
+cors:
+  allowed-origins:
+    - https://commerce.com      # 운영 프론트 도메인
+    - https://www.commerce.com

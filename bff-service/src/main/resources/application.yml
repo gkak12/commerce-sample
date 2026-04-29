@@ -103,6 +103,10 @@ jwt:
 cookie:
   secure: false   # 로컬 개발환경 (HTTP). 운영 환경은 application-prod.yml에서 true로 설정
 
+cors:
+  allowed-origins:
+    - http://localhost:3000   # 로컬 프론트 개발 서버
+
 server:
   port: 8080
 
