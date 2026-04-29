@@ -1,9 +1,8 @@
 package com.commerce.bff.service.impl;
 
+import com.commerce.bff.dto.auth.AuthTokens;
 import com.commerce.bff.dto.auth.LoginRequest;
-import com.commerce.bff.dto.auth.RefreshTokenRequest;
 import com.commerce.bff.dto.auth.SignupRequest;
-import com.commerce.bff.dto.auth.TokenResponse;
 import com.commerce.bff.entity.AuthProvider;
 import com.commerce.bff.entity.Role;
 import com.commerce.bff.entity.User;
@@ -36,7 +35,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
-    public TokenResponse signup(SignupRequest request) {
+    public AuthTokens signup(SignupRequest request) {
         if (userRepository.findByEmail(request.getEmail()).isPresent()) {
             throw new IllegalArgumentException("Already registered email: " + request.getEmail());
         }
@@ -54,18 +53,17 @@ public class AuthServiceImpl implements AuthService {
                 user.getUserId(), user.getEmail(), "ROLE_" + user.getRole().name());
         String refreshToken = jwtTokenProvider.generateRefreshToken(user.getUserId());
 
-        // Refresh Token Redis 저장
         refreshTokenService.save(user.getUserId(), refreshToken);
 
         log.info("[Auth] Signup complete. userId={}", user.getUserId());
-        return TokenResponse.of(accessToken, refreshToken);
+        return AuthTokens.ofNew(accessToken, refreshToken);
     }
 
     // ── 로그인 ────────────────────────────────────────────────────────────────
 
     @Override
     @Transactional(readOnly = true)
-    public TokenResponse login(LoginRequest request) {
+    public AuthTokens login(LoginRequest request) {
         User user = userRepository.findByEmail(request.getEmail())
                 .filter(u -> u.getProvider() == AuthProvider.LOCAL)
                 .orElseThrow(() -> new BadCredentialsException("Invalid email or password"));
@@ -78,11 +76,11 @@ public class AuthServiceImpl implements AuthService {
                 user.getUserId(), user.getEmail(), "ROLE_" + user.getRole().name());
         String refreshToken = jwtTokenProvider.generateRefreshToken(user.getUserId());
 
-        // Refresh Token Redis 저장 (기존 토큰 덮어쓰기 → 중복 로그인 시 최신 기기만 유효)
+        // 기존 토큰 덮어쓰기 → 중복 로그인 시 최신 기기만 유효
         refreshTokenService.save(user.getUserId(), refreshToken);
 
         log.info("[Auth] Login complete. userId={}", user.getUserId());
-        return TokenResponse.of(accessToken, refreshToken);
+        return AuthTokens.ofNew(accessToken, refreshToken);
     }
 
     // ── 토큰 갱신 (Sliding Window Rotation) ──────────────────────────────────
@@ -95,18 +93,15 @@ public class AuthServiceImpl implements AuthService {
      *   2. Redis 저장값과 일치 여부 검증 (탈취 감지)
      *   3. 새 Access Token 발급 (항상)
      *   4. Refresh Token 만료 임박 여부 판단
-     *      ├─ 임박 (1일 미만): 새 Refresh Token 발급 + Redis 갱신 (Rotation)
-     *      └─ 여유 있음: 기존 Refresh Token 재사용 (Redis WRITE 생략)
+     *      ├─ 임박 (1일 미만): 새 Refresh Token 발급 + Redis 갱신 → Cookie 갱신
+     *      └─ 여유 있음: 기존 Refresh Token 재사용 → Cookie 변경 없음
      *
-     * 탈취 감지 시나리오:
-     *   - 이미 Rotation된(폐기된) Refresh Token으로 재발급 요청
-     *     → Redis 저장값과 불일치 → 전체 로그아웃 → 재로그인 강제
+     * 탈취 감지:
+     *   이미 Rotation된 토큰 재사용 → Redis 전체 삭제 → 재로그인 강제
      */
     @Override
     @Transactional(readOnly = true)
-    public TokenResponse refresh(RefreshTokenRequest request) {
-        String refreshToken = request.getRefreshToken();
-
+    public AuthTokens refresh(String refreshToken) {
         // 1. JWT 서명/만료 검증
         if (!jwtTokenProvider.validateToken(refreshToken)) {
             throw new BadCredentialsException("Invalid or expired refresh token");
@@ -133,12 +128,11 @@ public class AuthServiceImpl implements AuthService {
             String newRefreshToken = jwtTokenProvider.generateRefreshToken(user.getUserId());
             refreshTokenService.save(userId, newRefreshToken);
             log.debug("[Auth] Refresh token rotated (expiring soon). userId={}", userId);
-            return TokenResponse.of(newAccessToken, newRefreshToken);
+            return AuthTokens.ofRotated(newAccessToken, newRefreshToken);
         }
 
-        // 만료 여유 있음 → 기존 Refresh Token 재사용 (Redis WRITE 없음)
         log.debug("[Auth] Access token refreshed. Refresh token reused. userId={}", userId);
-        return TokenResponse.of(newAccessToken, refreshToken);
+        return AuthTokens.ofReused(newAccessToken, refreshToken);
     }
 
     // ── 로그아웃 ──────────────────────────────────────────────────────────────
