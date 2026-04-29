@@ -1,5 +1,6 @@
 package com.commerce.bff.security.oauth2;
 
+import com.commerce.bff.config.CookieProperties;
 import com.commerce.bff.config.JwtProperties;
 import com.commerce.bff.security.JwtTokenProvider;
 import com.commerce.bff.security.RefreshTokenService;
@@ -29,6 +30,7 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenService refreshTokenService;
     private final JwtProperties jwtProperties;
+    private final CookieProperties cookieProperties;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -52,7 +54,7 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
         // Refresh Token → HttpOnly Cookie
         ResponseCookie refreshCookie = ResponseCookie.from(REFRESH_TOKEN_COOKIE, refreshToken)
                 .httpOnly(true)
-                .secure(false)          // 운영 환경: true (HTTPS 필수)
+                .secure(cookieProperties.isSecure())    // 로컬: false / 운영(prod): true
                 .sameSite("Strict")
                 .path("/api/auth")
                 .maxAge(jwtProperties.getRefreshTokenExpiration() / 1000)   // ms → 초

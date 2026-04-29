@@ -100,6 +100,9 @@ jwt:
   refresh-token-expiration: 604800000 # 7일 (ms)
   rotation-threshold-days: 1          # Refresh Token 남은 유효기간이 1일 미만이면 Rotation
 
+cookie:
+  secure: false   # 로컬 개발환경 (HTTP). 운영 환경은 application-prod.yml에서 true로 설정
+
 server:
   port: 8080
 

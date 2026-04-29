@@ -1,5 +1,6 @@
 package com.commerce.bff.controller;
 
+import com.commerce.bff.config.CookieProperties;
 import com.commerce.bff.config.JwtProperties;
 import com.commerce.bff.dto.auth.AuthTokens;
 import com.commerce.bff.dto.auth.LoginRequest;
@@ -26,6 +27,7 @@ public class AuthController {
 
     private final AuthService authService;
     private final JwtProperties jwtProperties;
+    private final CookieProperties cookieProperties;
 
     @Operation(summary = "회원가입",
             description = "이메일/비밀번호로 회원가입. Access Token은 Body, Refresh Token은 HttpOnly Cookie로 발급.")
@@ -95,7 +97,7 @@ public class AuthController {
     private ResponseCookie buildRefreshCookie(String value) {
         return ResponseCookie.from(REFRESH_TOKEN_COOKIE, value)
                 .httpOnly(true)
-                .secure(false)          // 운영 환경: true (HTTPS 필수)
+                .secure(cookieProperties.isSecure())    // 로컬: false / 운영(prod): true
                 .sameSite("Strict")
                 .path("/api/auth")
                 .maxAge(jwtProperties.getRefreshTokenExpiration() / 1000)   // ms → 초
@@ -106,7 +108,7 @@ public class AuthController {
     private ResponseCookie expireRefreshCookie() {
         return ResponseCookie.from(REFRESH_TOKEN_COOKIE, "")
                 .httpOnly(true)
-                .secure(false)          // 운영 환경: true
+                .secure(cookieProperties.isSecure())    // 로컬: false / 운영(prod): true
                 .sameSite("Strict")
                 .path("/api/auth")
                 .maxAge(0)
