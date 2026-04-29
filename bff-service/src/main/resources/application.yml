@@ -98,6 +98,7 @@ jwt:
   secret: your-jwt-secret-key-must-be-at-least-32-characters-long
   access-token-expiration: 1800000    # 30분 (ms)
   refresh-token-expiration: 604800000 # 7일 (ms)
+  rotation-threshold-days: 1          # Refresh Token 남은 유효기간이 1일 미만이면 Rotation
 
 server:
   port: 8080

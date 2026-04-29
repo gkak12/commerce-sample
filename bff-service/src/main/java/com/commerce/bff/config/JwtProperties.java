@@ -13,4 +13,5 @@ public class JwtProperties {
     private String secret;
     private long accessTokenExpiration;
     private long refreshTokenExpiration;
+    private long rotationThresholdDays; // Refresh Token 만료 임박 기준 (일), 이 기간 미만이면 Rotation
 }

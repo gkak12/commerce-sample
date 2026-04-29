@@ -39,7 +39,9 @@ public class SecurityConfig {
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
-                    "/api/auth/**",
+                    "/api/auth/signup",
+                    "/api/auth/login",
+                    "/api/auth/refresh",    // 토큰 갱신은 인증 없이 가능 (Access Token이 만료된 상태)
                     "/oauth2/**",
                     "/login/**",
                     // Swagger UI
@@ -52,6 +54,8 @@ public class SecurityConfig {
                 ).permitAll()
                 // 재고 조회는 비로그인 사용자도 볼 수 있어야 함 (상품 목록 화면 등)
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/stocks/**").permitAll()
+                // 로그아웃은 인증된 사용자만 (userId 식별 필요)
+                .requestMatchers("/api/auth/logout").authenticated()
                 .anyRequest().authenticated())
             .oauth2Login(oauth2 -> oauth2
                 .userInfoEndpoint(userInfo ->

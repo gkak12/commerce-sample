@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Date;
 
 @Component
@@ -70,5 +71,17 @@ public class JwtTokenProvider {
             log.warn("[JWT] Invalid token: {}", e.getMessage());
         }
         return false;
+    }
+
+    /**
+     * Refresh Token 만료 임박 여부 확인 (Sliding Window Rotation 판단용)
+     *
+     * 남은 유효기간이 rotationThreshold 미만이면 true → 새 Refresh Token 발급
+     * 남은 유효기간이 충분하면 false → 기존 Refresh Token 재사용 (Redis WRITE 생략)
+     */
+    public boolean isRefreshTokenExpiringSoon(String token) {
+        Date expiration = parseClaims(token).getExpiration();
+        long remainingMs = expiration.getTime() - System.currentTimeMillis();
+        return remainingMs < Duration.ofDays(jwtProperties.getRotationThresholdDays()).toMillis();
     }
 }
