@@ -7,11 +7,13 @@ import com.commerce.bff.dto.auth.SignupRequest;
 
 public interface AuthService {
 
-    AuthTokens signup(SignupRequest request);
+    /** @param ip 로그인 요청 IP (로그인 알림 푸시용) */
+    AuthTokens signup(SignupRequest request, String ip);
 
-    AuthTokens login(LoginRequest request);
+    /** @param ip 로그인 요청 IP (로그인 알림 푸시용) */
+    AuthTokens login(LoginRequest request, String ip);
 
-    /** @param refreshToken HttpOnly Cookie에서 추출한 Refresh Token
+    /** @param refreshToken HttpOnly Cookie 또는 Body에서 추출한 Refresh Token
      *  @param deviceId     X-Device-Id 헤더에서 추출한 기기 식별자 */
     AuthTokens refresh(String refreshToken, String deviceId);
 

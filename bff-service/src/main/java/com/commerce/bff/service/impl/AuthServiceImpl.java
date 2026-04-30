@@ -9,6 +9,7 @@ import com.commerce.bff.entity.Role;
 import com.commerce.bff.entity.User;
 import com.commerce.bff.repository.UserRepository;
 import com.commerce.bff.security.BlacklistTokenService;
+import com.commerce.bff.security.DeviceSessionService;
 import com.commerce.bff.security.JwtTokenProvider;
 import com.commerce.bff.security.RefreshTokenService;
 import com.commerce.bff.service.AuthService;
@@ -33,12 +34,13 @@ public class AuthServiceImpl implements AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenService refreshTokenService;
     private final BlacklistTokenService blacklistTokenService;
+    private final DeviceSessionService deviceSessionService;
 
     // ── 회원가입 ──────────────────────────────────────────────────────────────
 
     @Override
     @Transactional
-    public AuthTokens signup(SignupRequest request) {
+    public AuthTokens signup(SignupRequest request, String ip) {
         if (userRepository.findByEmail(request.getEmail()).isPresent()) {
             throw new IllegalArgumentException("Already registered email: " + request.getEmail());
         }
@@ -57,7 +59,12 @@ public class AuthServiceImpl implements AuthService {
                 user.getUserId(), user.getEmail(), "ROLE_" + user.getRole().name());
         String refreshToken = jwtTokenProvider.generateRefreshToken(user.getUserId());
 
+        // 기기 세션 등록
+        deviceSessionService.addDevice(user.getUserId(), deviceId);
         refreshTokenService.save(user.getUserId(), deviceId, refreshToken);
+
+        // ↓ 회원가입 완료 알림 푸시 발송 위치
+        // pushNotificationService.sendSignupAlert(user.getUserId(), ip);
 
         log.info("[Auth] Signup complete. userId={}", user.getUserId());
         return AuthTokens.ofNew(accessToken, refreshToken, deviceId);
@@ -67,7 +74,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional(readOnly = true)
-    public AuthTokens login(LoginRequest request) {
+    public AuthTokens login(LoginRequest request, String ip) {
         User user = userRepository.findByEmail(request.getEmail())
                 .filter(u -> u.getProvider() == AuthProvider.LOCAL)
                 .orElseThrow(() -> new BadCredentialsException("Invalid email or password"));
@@ -81,8 +88,25 @@ public class AuthServiceImpl implements AuthService {
                 user.getUserId(), user.getEmail(), "ROLE_" + user.getRole().name());
         String refreshToken = jwtTokenProvider.generateRefreshToken(user.getUserId());
 
-        // 기기별 독립 저장 — 다른 기기 토큰에 영향 없음
+        // 기기 수 제한 체크 (전략 A — 초과 시 가장 오래된 기기 자동 로그아웃)
+        String evictedDeviceId = deviceSessionService.addDevice(user.getUserId(), deviceId);
+        if (evictedDeviceId != null) {
+            // 강제 로그아웃된 기기의 Refresh Token 삭제
+            refreshTokenService.delete(user.getUserId(), evictedDeviceId);
+
+            // ↓ 강제 로그아웃된 기기에 알림 푸시 발송 위치
+            // pushNotificationService.sendForceLogoutAlert(user.getUserId(), evictedDeviceId,
+            //         "최대 로그인 기기 수 초과로 자동 로그아웃되었습니다.");
+        }
+
         refreshTokenService.save(user.getUserId(), deviceId, refreshToken);
+
+        // ↓ 새 기기 로그인 알림 푸시 발송 위치
+        // pushNotificationService.sendLoginAlert(
+        //         user.getUserId(),   // 알림 수신 대상
+        //         deviceId,           // 로그인한 기기
+        //         ip                  // 로그인 IP (위치 표시용)
+        // );
 
         log.info("[Auth] Login complete. userId={}, deviceId={}", user.getUserId(), deviceId);
         return AuthTokens.ofNew(accessToken, refreshToken, deviceId);
@@ -90,13 +114,6 @@ public class AuthServiceImpl implements AuthService {
 
     // ── 토큰 갱신 (Sliding Window Rotation) ──────────────────────────────────
 
-    /**
-     * Sliding Window Rotation + 탈취 감지 (기기별)
-     *
-     * 탈취 감지:
-     *   이미 Rotation된 토큰 재사용 → 해당 기기 토큰 삭제 → 재로그인 강제
-     *   (다른 기기 토큰은 영향 없음)
-     */
     @Override
     @Transactional(readOnly = true)
     public AuthTokens refresh(String refreshToken, String deviceId) {
@@ -106,10 +123,14 @@ public class AuthServiceImpl implements AuthService {
 
         String userId = jwtTokenProvider.getUserId(refreshToken);
 
-        // 기기별 탈취 감지
         if (!refreshTokenService.isValid(userId, deviceId, refreshToken)) {
             refreshTokenService.delete(userId, deviceId);
+            deviceSessionService.removeDevice(userId, deviceId);
             log.warn("[Auth] Refresh token reuse detected. userId={}, deviceId={}", userId, deviceId);
+
+            // ↓ 탈취 감지 알림 푸시 발송 위치
+            // pushNotificationService.sendTokenTheftAlert(userId, deviceId);
+
             throw new BadCredentialsException("Refresh token reuse detected. Please login again.");
         }
 
@@ -119,7 +140,6 @@ public class AuthServiceImpl implements AuthService {
         String newAccessToken = jwtTokenProvider.generateAccessToken(
                 user.getUserId(), user.getEmail(), "ROLE_" + user.getRole().name());
 
-        // Sliding Window: 만료 임박 시에만 Refresh Token 교체
         if (jwtTokenProvider.isRefreshTokenExpiringSoon(refreshToken)) {
             String newRefreshToken = jwtTokenProvider.generateRefreshToken(user.getUserId());
             refreshTokenService.save(userId, deviceId, newRefreshToken);
@@ -135,10 +155,11 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public void logout(String userId, String deviceId, String accessToken) {
-        // 1. 해당 기기 Refresh Token 삭제
+        // 해당 기기 Refresh Token + 세션 삭제
         refreshTokenService.delete(userId, deviceId);
+        deviceSessionService.removeDevice(userId, deviceId);
 
-        // 2. Access Token 블랙리스트 등록 (남은 유효기간 동안 차단)
+        // Access Token 블랙리스트 등록 (즉시 무효화)
         long remainingMs = jwtTokenProvider.getRemainingMs(accessToken);
         blacklistTokenService.add(accessToken, remainingMs);
 
@@ -147,14 +168,6 @@ public class AuthServiceImpl implements AuthService {
 
     // ── 비밀번호 변경 + 전체 기기 로그아웃 ────────────────────────────────────
 
-    /**
-     * 비밀번호 변경 후 모든 기기 강제 로그아웃
-     *
-     * 1. 현재 비밀번호 검증
-     * 2. 새 비밀번호로 변경
-     * 3. 모든 기기 Refresh Token 삭제 (SCAN cursor)
-     * 4. 현재 Access Token 블랙리스트 등록
-     */
     @Override
     @Transactional
     public void changePassword(String userId, String accessToken, ChangePasswordRequest request) {
@@ -165,15 +178,18 @@ public class AuthServiceImpl implements AuthService {
             throw new BadCredentialsException("Current password is incorrect");
         }
 
-        // 비밀번호 변경
         user.changePassword(passwordEncoder.encode(request.getNewPassword()));
 
-        // 모든 기기 Refresh Token 삭제
+        // 모든 기기 Refresh Token + 세션 삭제
         refreshTokenService.deleteAll(userId);
+        deviceSessionService.removeAll(userId);
 
-        // 현재 Access Token도 즉시 무효화
+        // 현재 Access Token 즉시 무효화
         long remainingMs = jwtTokenProvider.getRemainingMs(accessToken);
         blacklistTokenService.add(accessToken, remainingMs);
+
+        // ↓ 비밀번호 변경 알림 푸시 발송 위치 (모든 기기에 알림)
+        // pushNotificationService.sendPasswordChangedAlert(userId);
 
         log.info("[Auth] Password changed. All devices logged out. userId={}", userId);
     }

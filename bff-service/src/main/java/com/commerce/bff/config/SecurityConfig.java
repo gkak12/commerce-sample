@@ -1,5 +1,6 @@
 package com.commerce.bff.config;
 
+import com.commerce.bff.security.BlacklistTokenService;
 import com.commerce.bff.security.CustomUserDetailsService;
 import com.commerce.bff.security.JwtAuthenticationFilter;
 import com.commerce.bff.security.JwtTokenProvider;

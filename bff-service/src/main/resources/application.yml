@@ -107,6 +107,9 @@ cors:
   allowed-origins:
     - http://localhost:3000   # 로컬 프론트 개발 서버
 
+device:
+  max-sessions: 5             # 사용자당 최대 동시 로그인 기기 수 (초과 시 가장 오래된 기기 자동 로그아웃)
+
 server:
   port: 8080
 
