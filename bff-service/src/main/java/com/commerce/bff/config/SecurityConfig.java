@@ -34,6 +34,7 @@ public class SecurityConfig {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final CustomUserDetailsService userDetailsService;
+    private final BlacklistTokenService blacklistTokenService;
     private final CustomOAuth2UserService customOAuth2UserService;
     private final OAuth2SuccessHandler oAuth2SuccessHandler;
     private final CorsProperties corsProperties;
@@ -81,7 +82,7 @@ public class SecurityConfig {
 
             // ── JWT Filter ───────────────────────────────────────────────────
             .addFilterBefore(
-                new JwtAuthenticationFilter(jwtTokenProvider, userDetailsService),
+                new JwtAuthenticationFilter(jwtTokenProvider, userDetailsService, blacklistTokenService),
                 UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

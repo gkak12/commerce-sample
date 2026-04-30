@@ -84,4 +84,12 @@ public class JwtTokenProvider {
         long remainingMs = expiration.getTime() - System.currentTimeMillis();
         return remainingMs < Duration.ofDays(jwtProperties.getRotationThresholdDays()).toMillis();
     }
+
+    /**
+     * Access Token 남은 유효기간 (ms) 반환
+     * 블랙리스트 TTL 설정에 사용 — 토큰 만료 시 Redis에서 자동 삭제
+     */
+    public long getRemainingMs(String token) {
+        return parseClaims(token).getExpiration().getTime() - System.currentTimeMillis();
+    }
 }

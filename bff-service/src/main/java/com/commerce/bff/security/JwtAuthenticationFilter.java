@@ -24,6 +24,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final CustomUserDetailsService userDetailsService;
+    private final BlacklistTokenService blacklistTokenService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -32,6 +33,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = resolveToken(request);
 
         if (StringUtils.hasText(token) && jwtTokenProvider.validateToken(token)) {
+
+            // 블랙리스트 확인 (로그아웃 / 비밀번호 변경으로 무효화된 토큰 차단)
+            if (blacklistTokenService.isBlacklisted(token)) {
+                log.warn("[JWT] Blacklisted token. Reject request.");
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                return;
+            }
+
             String userId = jwtTokenProvider.getUserId(token);
             UserDetails userDetails = userDetailsService.loadUserByUsername(userId);
 
