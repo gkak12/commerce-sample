@@ -56,8 +56,8 @@ public class AuthServiceImpl implements AuthService {
 
         String deviceId     = UUID.randomUUID().toString();
         String accessToken  = jwtTokenProvider.generateAccessToken(
-                user.getUserId(), user.getEmail(), "ROLE_" + user.getRole().name());
-        String refreshToken = jwtTokenProvider.generateRefreshToken(user.getUserId());
+                user.getUserId(), user.getEmail(), "ROLE_" + user.getRole().name(), deviceId);
+        String refreshToken = jwtTokenProvider.generateRefreshToken(user.getUserId(), deviceId);
 
         // 기기 세션 등록
         deviceSessionService.addDevice(user.getUserId(), deviceId);
@@ -85,8 +85,8 @@ public class AuthServiceImpl implements AuthService {
 
         String deviceId     = UUID.randomUUID().toString();
         String accessToken  = jwtTokenProvider.generateAccessToken(
-                user.getUserId(), user.getEmail(), "ROLE_" + user.getRole().name());
-        String refreshToken = jwtTokenProvider.generateRefreshToken(user.getUserId());
+                user.getUserId(), user.getEmail(), "ROLE_" + user.getRole().name(), deviceId);
+        String refreshToken = jwtTokenProvider.generateRefreshToken(user.getUserId(), deviceId);
 
         // 기기 수 제한 체크 (전략 A — 초과 시 가장 오래된 기기 자동 로그아웃)
         String evictedDeviceId = deviceSessionService.addDevice(user.getUserId(), deviceId);
@@ -116,12 +116,13 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional(readOnly = true)
-    public AuthTokens refresh(String refreshToken, String deviceId) {
+    public AuthTokens refresh(String refreshToken) {
         if (!jwtTokenProvider.validateToken(refreshToken)) {
             throw new BadCredentialsException("Invalid or expired refresh token");
         }
 
-        String userId = jwtTokenProvider.getUserId(refreshToken);
+        String userId   = jwtTokenProvider.getUserId(refreshToken);
+        String deviceId = jwtTokenProvider.getDeviceId(refreshToken);
 
         if (!refreshTokenService.isValid(userId, deviceId, refreshToken)) {
             refreshTokenService.delete(userId, deviceId);
@@ -138,10 +139,10 @@ public class AuthServiceImpl implements AuthService {
                 .orElseThrow(() -> new BadCredentialsException("User not found"));
 
         String newAccessToken = jwtTokenProvider.generateAccessToken(
-                user.getUserId(), user.getEmail(), "ROLE_" + user.getRole().name());
+                user.getUserId(), user.getEmail(), "ROLE_" + user.getRole().name(), deviceId);
 
         if (jwtTokenProvider.isRefreshTokenExpiringSoon(refreshToken)) {
-            String newRefreshToken = jwtTokenProvider.generateRefreshToken(user.getUserId());
+            String newRefreshToken = jwtTokenProvider.generateRefreshToken(user.getUserId(), deviceId);
             refreshTokenService.save(userId, deviceId, newRefreshToken);
             log.debug("[Auth] Refresh token rotated. userId={}, deviceId={}", userId, deviceId);
             return AuthTokens.ofRotated(newAccessToken, newRefreshToken, deviceId);
@@ -154,7 +155,10 @@ public class AuthServiceImpl implements AuthService {
     // ── 로그아웃 ──────────────────────────────────────────────────────────────
 
     @Override
-    public void logout(String userId, String deviceId, String accessToken) {
+    public void logout(String userId, String accessToken) {
+        // Access Token 클레임에서 deviceId 추출
+        String deviceId = jwtTokenProvider.getDeviceId(accessToken);
+
         // 해당 기기 Refresh Token + 세션 삭제
         refreshTokenService.delete(userId, deviceId);
         deviceSessionService.removeDevice(userId, deviceId);

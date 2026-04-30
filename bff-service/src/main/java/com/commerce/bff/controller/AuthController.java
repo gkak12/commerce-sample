@@ -23,7 +23,6 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private static final String REFRESH_TOKEN_COOKIE = "refreshToken";
-    private static final String DEVICE_ID_HEADER    = "X-Device-Id";
     private static final String CLIENT_TYPE_HEADER  = "X-Client-Type";
 
     private final AuthService authService;
@@ -60,7 +59,6 @@ public class AuthController {
     public ResponseEntity<TokenResponse> refresh(
             @CookieValue(name = REFRESH_TOKEN_COOKIE, required = false) String cookieRefreshToken,
             @RequestBody(required = false) RefreshTokenRequest bodyRequest,
-            @RequestHeader(value = DEVICE_ID_HEADER, required = false) String deviceId,
             @RequestHeader(value = CLIENT_TYPE_HEADER, defaultValue = "BROWSER") ClientType clientType) {
 
         // 클라이언트 유형에 따라 Refresh Token 추출
@@ -68,11 +66,11 @@ public class AuthController {
                 ? cookieRefreshToken
                 : (bodyRequest != null ? bodyRequest.getRefreshToken() : null);
 
-        if (!StringUtils.hasText(refreshToken) || !StringUtils.hasText(deviceId)) {
+        if (!StringUtils.hasText(refreshToken)) {
             return ResponseEntity.status(401).build();
         }
 
-        AuthTokens tokens = authService.refresh(refreshToken, deviceId);
+        AuthTokens tokens = authService.refresh(refreshToken);
 
         if (clientType == ClientType.BROWSER) {
             ResponseEntity.BodyBuilder builder = ResponseEntity.ok();
@@ -94,12 +92,11 @@ public class AuthController {
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(
             @AuthenticationPrincipal UserDetails userDetails,
-            @RequestHeader(value = DEVICE_ID_HEADER) String deviceId,
             @RequestHeader("Authorization") String authorization,
             @RequestHeader(value = CLIENT_TYPE_HEADER, defaultValue = "BROWSER") ClientType clientType) {
 
         String accessToken = authorization.substring(7);
-        authService.logout(userDetails.getUsername(), deviceId, accessToken);
+        authService.logout(userDetails.getUsername(), accessToken);
 
         // BROWSER: Cookie 만료 처리
         if (clientType == ClientType.BROWSER) {

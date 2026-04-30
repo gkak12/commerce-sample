@@ -50,8 +50,8 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
 
         String deviceId     = UUID.randomUUID().toString();
         String accessToken  = jwtTokenProvider.generateAccessToken(
-                oAuth2User.getUserId(), oAuth2User.getEmail(), role);
-        String refreshToken = jwtTokenProvider.generateRefreshToken(oAuth2User.getUserId());
+                oAuth2User.getUserId(), oAuth2User.getEmail(), role, deviceId);
+        String refreshToken = jwtTokenProvider.generateRefreshToken(oAuth2User.getUserId(), deviceId);
 
         // 기기 수 제한 체크 (전략 A — 초과 시 가장 오래된 기기 자동 로그아웃)
         String evictedDeviceId = deviceSessionService.addDevice(oAuth2User.getUserId(), deviceId);

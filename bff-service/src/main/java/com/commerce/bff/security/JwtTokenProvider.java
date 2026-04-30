@@ -25,20 +25,22 @@ public class JwtTokenProvider {
         return Keys.hmacShaKeyFor(jwtProperties.getSecret().getBytes(StandardCharsets.UTF_8));
     }
 
-    public String generateAccessToken(String userId, String email, String role) {
+    public String generateAccessToken(String userId, String email, String role, String deviceId) {
         return Jwts.builder()
                 .subject(userId)
                 .claim("email", email)
                 .claim("role", role)
+                .claim("deviceId", deviceId)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + jwtProperties.getAccessTokenExpiration()))
                 .signWith(getSigningKey())
                 .compact();
     }
 
-    public String generateRefreshToken(String userId) {
+    public String generateRefreshToken(String userId, String deviceId) {
         return Jwts.builder()
                 .subject(userId)
+                .claim("deviceId", deviceId)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + jwtProperties.getRefreshTokenExpiration()))
                 .signWith(getSigningKey())
@@ -55,6 +57,10 @@ public class JwtTokenProvider {
 
     public String getUserId(String token) {
         return parseClaims(token).getSubject();
+    }
+
+    public String getDeviceId(String token) {
+        return parseClaims(token).get("deviceId", String.class);
     }
 
     public boolean validateToken(String token) {
