@@ -49,6 +49,11 @@ public class SecurityConfig {
             // Refresh Token : HttpOnly Cookie + SameSite=Strict → 다른 Origin 요청 시 Cookie 미전송
             .csrf(AbstractHttpConfigurer::disable)
 
+            // ── formLogin / httpBasic 비활성화 ──────────────────────────────
+            // JWT + REST API 방식 사용 → 세션 기반 로그인 필터 불필요
+            .formLogin(AbstractHttpConfigurer::disable)
+            .httpBasic(AbstractHttpConfigurer::disable)
+
             // ── CORS ────────────────────────────────────────────────────────
             // 허용된 Origin만 응답 접근 가능 (application.yml cors.allowed-origins 설정)
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
