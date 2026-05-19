@@ -1,14 +1,14 @@
 package com.commerce.bff.service;
 
-import com.commerce.bff.dto.auth.AuthTokens;
-import com.commerce.bff.dto.auth.ChangePasswordRequest;
-import com.commerce.bff.dto.auth.LoginRequest;
-import com.commerce.bff.dto.auth.SignupRequest;
+import com.commerce.bff.dto.auth.*;
 
 public interface AuthService {
 
     /** @param ip 로그인 요청 IP (로그인 알림 푸시용) */
     AuthTokens signup(SignupRequest request, String ip);
+
+    /** @param ip 로그인 요청 IP (로그인 알림 푸시용) */
+    void createAdminAccount(AdminCreateRequest request, String ip);
 
     /** @param ip 로그인 요청 IP (로그인 알림 푸시용) */
     AuthTokens login(LoginRequest request, String ip);

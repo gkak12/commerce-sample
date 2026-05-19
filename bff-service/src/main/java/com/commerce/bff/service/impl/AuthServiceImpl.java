@@ -1,9 +1,6 @@
 package com.commerce.bff.service.impl;
 
-import com.commerce.bff.dto.auth.AuthTokens;
-import com.commerce.bff.dto.auth.ChangePasswordRequest;
-import com.commerce.bff.dto.auth.LoginRequest;
-import com.commerce.bff.dto.auth.SignupRequest;
+import com.commerce.bff.dto.auth.*;
 import com.commerce.bff.entity.AuthProvider;
 import com.commerce.bff.entity.Role;
 import com.commerce.bff.entity.User;
@@ -68,6 +65,25 @@ public class AuthServiceImpl implements AuthService {
 
         log.info("[Auth] Signup complete. userId={}", user.getUserId());
         return AuthTokens.ofNew(accessToken, refreshToken, deviceId);
+    }
+
+    @Override
+    @Transactional
+    public void createAdminAccount(AdminCreateRequest request, String ip) {
+        if (userRepository.findByEmail(request.getEmail()).isPresent()) {
+            throw new IllegalArgumentException("Already registered email: " + request.getEmail());
+        }
+
+        User user = userRepository.save(User.builder()
+                .userId(UUID.randomUUID().toString())
+                .email(request.getEmail())
+                .name(request.getName())
+                .password(passwordEncoder.encode(request.getPassword()))
+                .provider(AuthProvider.LOCAL)
+                .role(Role.ADMIN)
+                .build());
+
+        log.info("[Auth] CreateAdminAccount complete. userId={}", user.getUserId());
     }
 
     // ── 로그인 ────────────────────────────────────────────────────────────────

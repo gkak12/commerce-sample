@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.ResponseCookie;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.util.StringUtils;
@@ -29,7 +30,7 @@ public class AuthController {
     private final JwtProperties jwtProperties;
     private final CookieProperties cookieProperties;
 
-    @Operation(summary = "회원가입",
+    @Operation(summary = "일반 회원가입",
             description = "BROWSER: Refresh Token → HttpOnly Cookie | MOBILE: Refresh Token → JSON Body")
     @PostMapping("/signup")
     public ResponseEntity<TokenResponse> signup(
@@ -39,6 +40,19 @@ public class AuthController {
 
         AuthTokens tokens = authService.signup(request, extractIp(httpRequest));
         return buildLoginResponse(tokens, clientType);
+    }
+
+    @Operation(summary = "관리자 계정 생성",
+            description = "BROWSER: Refresh Token → HttpOnly Cookie | MOBILE: Refresh Token → JSON Body")
+    @PostMapping("/admin")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> createAdminAccount(
+            @RequestBody AdminCreateRequest request,
+            @RequestHeader(value = CLIENT_TYPE_HEADER, defaultValue = "BROWSER") ClientType clientType,
+            HttpServletRequest httpRequest
+    ){
+        authService.createAdminAccount(request, extractIp(httpRequest));
+        return ResponseEntity.status(201).build();  // 토큰 없이 생성 완료 결과만 응답
     }
 
     @Operation(summary = "로그인",
