@@ -1,14 +1,18 @@
 package com.commerce.bff.controller;
 
 import com.commerce.bff.stock.StockRedisService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -24,6 +28,20 @@ class StockControllerTest {
 
     @MockBean
     StockRedisService stockRedisService;
+
+    // RateLimitInterceptor → RedisTemplate 의존성 (@WebMvcTest는 Redis를 auto-configure하지 않음)
+    @MockBean
+    RedisTemplate<String, String> redisTemplate;
+
+    @BeforeEach
+    @SuppressWarnings("unchecked")
+    void setUp() {
+        // RateLimitInterceptor가 opsForValue().increment()를 호출하므로
+        // null 반환으로 인한 NPE(500) 방지 — 카운터 1 반환(제한 미초과)
+        ValueOperations<String, String> valueOps = mock(ValueOperations.class);
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.increment(anyString())).thenReturn(1L);
+    }
 
     // ── POST /api/stocks/{productId}/init ─────────────────────────────────────
 

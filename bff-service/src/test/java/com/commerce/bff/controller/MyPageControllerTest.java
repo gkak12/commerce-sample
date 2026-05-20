@@ -1,28 +1,37 @@
 package com.commerce.bff.controller;
 
+import com.commerce.bff.cache.MyPageCacheService;
 import com.commerce.bff.grpc.DeliveryGrpcClient;
 import com.commerce.bff.grpc.OrderGrpcClient;
 import com.commerce.bff.grpc.PointGrpcClient;
+import com.commerce.bff.mapper.MyPageMapperImpl;
 import com.commerce.grpc.delivery.GetDeliveryStatusResponse;
 import com.commerce.grpc.order.GetOrderListResponse;
 import com.commerce.grpc.order.GetOrderStatusResponse;
 import com.commerce.grpc.order.OrderSummary;
 import com.commerce.grpc.point.GetPointBalanceResponse;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
+import java.util.function.Supplier;
+
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = MyPageController.class) // 보안 설정을 제외하지 않습니다.
+@WebMvcTest(controllers = MyPageController.class)
+@Import(MyPageMapperImpl.class) // MapStruct 생성 구현체 직접 주입 (default 메서드만 있어 코드 생성 최소화)
 @DisplayName("MyPageController 단위 테스트")
 class MyPageControllerTest {
 
@@ -37,6 +46,36 @@ class MyPageControllerTest {
 
     @MockBean
     DeliveryGrpcClient deliveryGrpcClient;
+
+    // RateLimitInterceptor → RedisTemplate 의존성 (@WebMvcTest는 Redis를 auto-configure하지 않음)
+    @MockBean
+    RedisTemplate<String, String> redisTemplate;
+
+    // MyPageController 생성자 의존성 (@WebMvcTest는 @Service를 스캔하지 않음)
+    @MockBean
+    MyPageCacheService cacheService;
+
+    @BeforeEach
+    @SuppressWarnings("unchecked")
+    void setUp() {
+        // RateLimitInterceptor NPE 방지: opsForValue().increment() 스터빙
+        ValueOperations<String, String> valueOps = mock(ValueOperations.class);
+        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        when(valueOps.increment(anyString())).thenReturn(1L);
+
+        // 캐시 서비스 pass-through: Supplier를 그대로 실행하여 gRPC mock + 실제 mapper 결과 반영
+        // 시그니처: getOrderList(String, int, int, Class<T>, Supplier<T>) → Supplier는 인덱스 4
+        lenient().doAnswer(inv -> ((Supplier<?>) inv.getArgument(4)).get())
+                .when(cacheService).getOrderList(anyString(), anyInt(), anyInt(), any(), any());
+
+        // 시그니처: getOrderDetail(String, String, Class<T>, Supplier<T>) → Supplier는 인덱스 3
+        lenient().doAnswer(inv -> ((Supplier<?>) inv.getArgument(3)).get())
+                .when(cacheService).getOrderDetail(anyString(), anyString(), any(), any());
+
+        // 시그니처: getPoints(String, Class<T>, Supplier<T>) → Supplier는 인덱스 2
+        lenient().doAnswer(inv -> ((Supplier<?>) inv.getArgument(2)).get())
+                .when(cacheService).getPoints(anyString(), any(), any());
+    }
 
     // ── GET /api/my/orders ────────────────────────────────────────────────────
 
@@ -121,7 +160,7 @@ class MyPageControllerTest {
 
     @Test
     @WithMockUser(username = "user-001")
-    @DisplayName("주문 상세 조회 - 배송 시작 전이면 delivery=null")
+    @DisplayName("주문 상세 조회 - 배송 시작 전이면 delivery 필드 없음")
     void getOrderDetail_found_noDelivery() throws Exception {
         GetOrderStatusResponse orderResp = GetOrderStatusResponse.newBuilder()
                 .setFound(true)
