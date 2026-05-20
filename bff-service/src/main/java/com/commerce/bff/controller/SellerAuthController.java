@@ -3,7 +3,7 @@ package com.commerce.bff.controller;
 import com.commerce.bff.config.CookieProperties;
 import com.commerce.bff.config.JwtProperties;
 import com.commerce.bff.dto.auth.*;
-import com.commerce.bff.service.AuthService;
+import com.commerce.bff.service.SellerAuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -17,38 +17,38 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
-@Tag(name = "일반 회원 인증", description = "일반 회원 회원가입/로그인 API")
+@Tag(name = "판매자 인증", description = "판매자 회원가입/로그인 API (이메일/비밀번호 전용)")
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/api/auth/seller")
 @RequiredArgsConstructor
-public class AuthController {
+public class SellerAuthController {
 
-    private static final String REFRESH_TOKEN_COOKIE = "refreshToken";
+    private static final String REFRESH_TOKEN_COOKIE = "sellerRefreshToken";
     private static final String CLIENT_TYPE_HEADER   = "X-Client-Type";
 
-    private final AuthService authService;
+    private final SellerAuthService sellerAuthService;
     private final JwtProperties jwtProperties;
     private final CookieProperties cookieProperties;
 
-    @Operation(summary = "일반 회원가입")
+    @Operation(summary = "판매자 회원가입", description = "가입 후 사업자 정보를 별도로 제출해야 판매 기능이 활성화됩니다.")
     @PostMapping("/signup")
     public ResponseEntity<TokenResponse> signup(
-            @RequestBody @Valid SignupRequest request,
+            @RequestBody @Valid SellerSignupRequest request,
             @RequestHeader(value = CLIENT_TYPE_HEADER, defaultValue = "BROWSER") ClientType clientType,
             HttpServletRequest httpRequest) {
 
-        AuthTokens tokens = authService.signup(request, extractIp(httpRequest));
+        AuthTokens tokens = sellerAuthService.signup(request, extractIp(httpRequest));
         return buildTokenResponse(tokens, clientType);
     }
 
-    @Operation(summary = "로그인")
+    @Operation(summary = "판매자 로그인")
     @PostMapping("/login")
     public ResponseEntity<TokenResponse> login(
             @RequestBody LoginRequest request,
             @RequestHeader(value = CLIENT_TYPE_HEADER, defaultValue = "BROWSER") ClientType clientType,
             HttpServletRequest httpRequest) {
 
-        AuthTokens tokens = authService.login(request, extractIp(httpRequest));
+        AuthTokens tokens = sellerAuthService.login(request, extractIp(httpRequest));
         return buildTokenResponse(tokens, clientType);
     }
 
@@ -64,7 +64,7 @@ public class AuthController {
             return ResponseEntity.status(401).build();
         }
 
-        AuthTokens tokens = authService.refresh(refreshToken);
+        AuthTokens tokens = sellerAuthService.refresh(refreshToken);
         return buildRefreshResponse(tokens, clientType);
     }
 
@@ -75,7 +75,7 @@ public class AuthController {
             @RequestHeader("Authorization") String authorization,
             @RequestHeader(value = CLIENT_TYPE_HEADER, defaultValue = "BROWSER") ClientType clientType) {
 
-        authService.logout(userDetails.getUsername(), authorization.substring(7));
+        sellerAuthService.logout(userDetails.getUsername(), authorization.substring(7));
         return clientType == ClientType.BROWSER
                 ? ResponseEntity.noContent().header(HttpHeaders.SET_COOKIE, expireRefreshCookie().toString()).build()
                 : ResponseEntity.noContent().build();
@@ -89,7 +89,7 @@ public class AuthController {
             @RequestHeader(value = CLIENT_TYPE_HEADER, defaultValue = "BROWSER") ClientType clientType,
             @RequestBody ChangePasswordRequest request) {
 
-        authService.changePassword(userDetails.getUsername(), authorization.substring(7), request);
+        sellerAuthService.changePassword(userDetails.getUsername(), authorization.substring(7), request);
         return clientType == ClientType.BROWSER
                 ? ResponseEntity.noContent().header(HttpHeaders.SET_COOKIE, expireRefreshCookie().toString()).build()
                 : ResponseEntity.noContent().build();
@@ -135,7 +135,7 @@ public class AuthController {
                 .httpOnly(true)
                 .secure(cookieProperties.isSecure())
                 .sameSite("Strict")
-                .path("/api/auth")
+                .path("/api/auth/seller")
                 .maxAge(jwtProperties.getRefreshTokenExpiration() / 1000)
                 .build();
     }
@@ -145,7 +145,7 @@ public class AuthController {
                 .httpOnly(true)
                 .secure(cookieProperties.isSecure())
                 .sameSite("Strict")
-                .path("/api/auth")
+                .path("/api/auth/seller")
                 .maxAge(0)
                 .build();
     }

@@ -24,6 +24,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final CustomUserDetailsService userDetailsService;
+    private final SellerDetailsService sellerDetailsService;
+    private final AdminDetailsService adminDetailsService;
     private final BlacklistTokenService blacklistTokenService;
 
     @Override
@@ -34,22 +36,28 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         if (StringUtils.hasText(token) && jwtTokenProvider.validateToken(token)) {
 
-            // 블랙리스트 확인 (로그아웃 / 비밀번호 변경으로 무효화된 토큰 차단)
             if (blacklistTokenService.isBlacklisted(token)) {
                 log.warn("[JWT] Blacklisted token. Reject request.");
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 return;
             }
 
-            String userId = jwtTokenProvider.getUserId(token);
-            UserDetails userDetails = userDetailsService.loadUserByUsername(userId);
+            String userId   = jwtTokenProvider.getUserId(token);
+            String userType = jwtTokenProvider.getUserType(token);
+
+            // userType 클레임으로 테이블 라우팅
+            UserDetails userDetails = switch (userType != null ? userType : "USER") {
+                case "SELLER" -> sellerDetailsService.loadUserByUsername(userId);
+                case "ADMIN"  -> adminDetailsService.loadUserByUsername(userId);
+                default       -> userDetailsService.loadUserByUsername(userId);
+            };
 
             UsernamePasswordAuthenticationToken authentication =
                     new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
             authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
-            log.debug("[JWT] Authentication set for userId={}", userId);
+            log.debug("[JWT] Authentication set for userId={}, userType={}", userId, userType);
         }
 
         filterChain.doFilter(request, response);

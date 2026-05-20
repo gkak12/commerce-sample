@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 
 @Getter
 @NoArgsConstructor
-public class SignupRequest {
+public class SellerSignupRequest {
 
     @NotBlank
     @Email

@@ -15,6 +15,7 @@ import lombok.Getter;
 @Getter
 @AllArgsConstructor
 public class TokenResponse {
+
     private String accessToken;
     private String tokenType;
 
@@ -24,23 +25,39 @@ public class TokenResponse {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private String refreshToken;    // MOBILE 클라이언트만 포함
 
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private Boolean passwordChangeRequired;  // 관리자 임시 비밀번호 변경 필요 시만 포함
+
     /** BROWSER — 토큰 갱신 응답 */
     public static TokenResponse of(String accessToken) {
-        return new TokenResponse(accessToken, "Bearer", null, null);
+        return new TokenResponse(accessToken, "Bearer", null, null, null);
     }
 
     /** BROWSER — 로그인/회원가입 응답 */
     public static TokenResponse of(String accessToken, String deviceId) {
-        return new TokenResponse(accessToken, "Bearer", deviceId, null);
+        return new TokenResponse(accessToken, "Bearer", deviceId, null, null);
     }
 
     /** MOBILE — 로그인/회원가입 응답 (refreshToken Body 포함) */
     public static TokenResponse ofMobile(String accessToken, String refreshToken, String deviceId) {
-        return new TokenResponse(accessToken, "Bearer", deviceId, refreshToken);
+        return new TokenResponse(accessToken, "Bearer", deviceId, refreshToken, null);
     }
 
     /** MOBILE — 토큰 갱신 응답 (Rotation 발생 시 refreshToken 포함) */
     public static TokenResponse ofMobileRefresh(String accessToken, String refreshToken) {
-        return new TokenResponse(accessToken, "Bearer", null, refreshToken);
+        return new TokenResponse(accessToken, "Bearer", null, refreshToken, null);
+    }
+
+    /** BROWSER — 관리자 로그인 응답 (임시 비밀번호 변경 필요 여부 포함) */
+    public static TokenResponse ofAdmin(String accessToken, String deviceId, boolean passwordChangeRequired) {
+        return new TokenResponse(accessToken, "Bearer", deviceId,  null,
+                passwordChangeRequired ? true : null);
+    }
+
+    /** MOBILE — 관리자 로그인 응답 */
+    public static TokenResponse ofAdminMobile(String accessToken, String refreshToken,
+                                              String deviceId, boolean passwordChangeRequired) {
+        return new TokenResponse(accessToken, "Bearer", deviceId, refreshToken,
+                passwordChangeRequired ? true : null);
     }
 }

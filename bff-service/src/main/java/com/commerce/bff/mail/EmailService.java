@@ -37,6 +37,28 @@ public class EmailService {
     }
 
     /**
+     * 관리자 임시 비밀번호 발송
+     */
+    @Async
+    public void sendAdminTempPasswordMail(String to, String name, String tempPassword) {
+        String subject = "[Commerce] 관리자 계정이 생성되었습니다";
+        String content = """
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <h2 style="color: #2196F3;">🔐 관리자 계정 안내</h2>
+                    <hr style="border: 1px solid #eee;">
+                    <p>안녕하세요, <strong>%s</strong>님.</p>
+                    <p>관리자 계정이 생성되었습니다. 아래 임시 비밀번호로 로그인 후 반드시 변경해 주세요.</p>
+                    <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                        <p style="margin: 0; font-size: 18px; font-weight: bold; letter-spacing: 2px;">%s</p>
+                    </div>
+                    <p style="color: #f44336;">⚠ 임시 비밀번호는 첫 로그인 후 즉시 변경해야 합니다.</p>
+                    <p style="color: #888; font-size: 12px;">본 메일은 발신 전용입니다.</p>
+                </div>
+                """.formatted(name, tempPassword);
+        send(to, subject, content);
+    }
+
+    /**
      * 주문 취소 메일
      */
     @Async

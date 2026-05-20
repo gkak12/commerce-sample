@@ -25,12 +25,17 @@ public class JwtTokenProvider {
         return Keys.hmacShaKeyFor(jwtProperties.getSecret().getBytes(StandardCharsets.UTF_8));
     }
 
-    public String generateAccessToken(String userId, String email, String role, String deviceId) {
+    /**
+     * @param userType "USER" | "SELLER" | "ADMIN"
+     *                 JwtAuthenticationFilter에서 테이블 라우팅에 사용
+     */
+    public String generateAccessToken(String userId, String email, String role, String deviceId, String userType) {
         return Jwts.builder()
                 .subject(userId)
                 .claim("email", email)
                 .claim("role", role)
                 .claim("deviceId", deviceId)
+                .claim("userType", userType)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + jwtProperties.getAccessTokenExpiration()))
                 .signWith(getSigningKey())
@@ -61,6 +66,10 @@ public class JwtTokenProvider {
 
     public String getDeviceId(String token) {
         return parseClaims(token).get("deviceId", String.class);
+    }
+
+    public String getUserType(String token) {
+        return parseClaims(token).get("userType", String.class);
     }
 
     public boolean validateToken(String token) {

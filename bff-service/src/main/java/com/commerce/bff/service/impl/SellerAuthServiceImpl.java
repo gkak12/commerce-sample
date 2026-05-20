@@ -1,14 +1,13 @@
 package com.commerce.bff.service.impl;
 
 import com.commerce.bff.dto.auth.*;
-import com.commerce.bff.entity.AuthProvider;
-import com.commerce.bff.entity.User;
-import com.commerce.bff.repository.UserRepository;
+import com.commerce.bff.entity.Seller;
+import com.commerce.bff.repository.SellerRepository;
 import com.commerce.bff.security.BlacklistTokenService;
 import com.commerce.bff.security.DeviceSessionService;
 import com.commerce.bff.security.JwtTokenProvider;
 import com.commerce.bff.security.RefreshTokenService;
-import com.commerce.bff.service.AuthService;
+import com.commerce.bff.service.SellerAuthService;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,12 +20,12 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class AuthServiceImpl implements AuthService {
+public class SellerAuthServiceImpl implements SellerAuthService {
 
-    private static final Logger log = LoggerFactory.getLogger(AuthServiceImpl.class);
-    private static final String USER_TYPE = "USER";
+    private static final Logger log = LoggerFactory.getLogger(SellerAuthServiceImpl.class);
+    private static final String USER_TYPE = "SELLER";
 
-    private final UserRepository userRepository;
+    private final SellerRepository sellerRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenService refreshTokenService;
@@ -37,21 +36,20 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
-    public AuthTokens signup(SignupRequest request, String ip) {
-        if (userRepository.existsByEmail(request.getEmail())) {
+    public AuthTokens signup(SellerSignupRequest request, String ip) {
+        if (sellerRepository.existsByEmail(request.getEmail())) {
             throw new IllegalArgumentException("Already registered email: " + request.getEmail());
         }
 
-        User user = userRepository.save(User.builder()
-                .userId(UUID.randomUUID().toString())
+        Seller seller = sellerRepository.save(Seller.builder()
+                .sellerId(UUID.randomUUID().toString())
                 .email(request.getEmail())
                 .name(request.getName())
                 .password(passwordEncoder.encode(request.getPassword()))
-                .provider(AuthProvider.LOCAL)
                 .build());
 
-        log.info("[User] Signup complete. userId={}", user.getUserId());
-        return issueTokens(user.getUserId(), user.getEmail());
+        log.info("[Seller] Signup complete. sellerId={}", seller.getSellerId());
+        return issueTokens(seller.getSellerId(), seller.getEmail());
     }
 
     // ── 로그인 ────────────────────────────────────────────────────────────────
@@ -59,25 +57,25 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional(readOnly = true)
     public AuthTokens login(LoginRequest request, String ip) {
-        User user = userRepository.findByEmailAndProvider(request.getEmail(), AuthProvider.LOCAL)
+        Seller seller = sellerRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new BadCredentialsException("Invalid email or password"));
 
-        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+        if (!passwordEncoder.matches(request.getPassword(), seller.getPassword())) {
             throw new BadCredentialsException("Invalid email or password");
         }
 
         String deviceId     = UUID.randomUUID().toString();
         String accessToken  = jwtTokenProvider.generateAccessToken(
-                user.getUserId(), user.getEmail(), "ROLE_USER", deviceId, USER_TYPE);
-        String refreshToken = jwtTokenProvider.generateRefreshToken(user.getUserId(), deviceId);
+                seller.getSellerId(), seller.getEmail(), "ROLE_SELLER", deviceId, USER_TYPE);
+        String refreshToken = jwtTokenProvider.generateRefreshToken(seller.getSellerId(), deviceId);
 
-        String evictedDeviceId = deviceSessionService.addDevice(user.getUserId(), deviceId);
+        String evictedDeviceId = deviceSessionService.addDevice(seller.getSellerId(), deviceId);
         if (evictedDeviceId != null) {
-            refreshTokenService.delete(user.getUserId(), evictedDeviceId);
+            refreshTokenService.delete(seller.getSellerId(), evictedDeviceId);
         }
-        refreshTokenService.save(user.getUserId(), deviceId, refreshToken);
+        refreshTokenService.save(seller.getSellerId(), deviceId, refreshToken);
 
-        log.info("[User] Login complete. userId={}, deviceId={}", user.getUserId(), deviceId);
+        log.info("[Seller] Login complete. sellerId={}, deviceId={}", seller.getSellerId(), deviceId);
         return AuthTokens.ofNew(accessToken, refreshToken, deviceId);
     }
 
@@ -90,25 +88,25 @@ public class AuthServiceImpl implements AuthService {
             throw new BadCredentialsException("Invalid or expired refresh token");
         }
 
-        String userId   = jwtTokenProvider.getUserId(refreshToken);
+        String sellerId = jwtTokenProvider.getUserId(refreshToken);
         String deviceId = jwtTokenProvider.getDeviceId(refreshToken);
 
-        if (!refreshTokenService.isValid(userId, deviceId, refreshToken)) {
-            refreshTokenService.delete(userId, deviceId);
-            deviceSessionService.removeDevice(userId, deviceId);
-            log.warn("[User] Refresh token reuse detected. userId={}", userId);
+        if (!refreshTokenService.isValid(sellerId, deviceId, refreshToken)) {
+            refreshTokenService.delete(sellerId, deviceId);
+            deviceSessionService.removeDevice(sellerId, deviceId);
+            log.warn("[Seller] Refresh token reuse detected. sellerId={}", sellerId);
             throw new BadCredentialsException("Refresh token reuse detected. Please login again.");
         }
 
-        User user = userRepository.findByUserId(userId)
-                .orElseThrow(() -> new BadCredentialsException("User not found"));
+        Seller seller = sellerRepository.findBySellerId(sellerId)
+                .orElseThrow(() -> new BadCredentialsException("Seller not found"));
 
         String newAccessToken = jwtTokenProvider.generateAccessToken(
-                user.getUserId(), user.getEmail(), "ROLE_USER", deviceId, USER_TYPE);
+                seller.getSellerId(), seller.getEmail(), "ROLE_SELLER", deviceId, USER_TYPE);
 
         if (jwtTokenProvider.isRefreshTokenExpiringSoon(refreshToken)) {
-            String newRefreshToken = jwtTokenProvider.generateRefreshToken(user.getUserId(), deviceId);
-            refreshTokenService.save(userId, deviceId, newRefreshToken);
+            String newRefreshToken = jwtTokenProvider.generateRefreshToken(seller.getSellerId(), deviceId);
+            refreshTokenService.save(sellerId, deviceId, newRefreshToken);
             return AuthTokens.ofRotated(newAccessToken, newRefreshToken, deviceId);
         }
 
@@ -118,44 +116,44 @@ public class AuthServiceImpl implements AuthService {
     // ── 로그아웃 ──────────────────────────────────────────────────────────────
 
     @Override
-    public void logout(String userId, String accessToken) {
+    public void logout(String sellerId, String accessToken) {
         String deviceId = jwtTokenProvider.getDeviceId(accessToken);
-        refreshTokenService.delete(userId, deviceId);
-        deviceSessionService.removeDevice(userId, deviceId);
+        refreshTokenService.delete(sellerId, deviceId);
+        deviceSessionService.removeDevice(sellerId, deviceId);
         blacklistTokenService.add(accessToken, jwtTokenProvider.getRemainingMs(accessToken));
-        log.info("[User] Logout complete. userId={}, deviceId={}", userId, deviceId);
+        log.info("[Seller] Logout complete. sellerId={}, deviceId={}", sellerId, deviceId);
     }
 
     // ── 비밀번호 변경 ─────────────────────────────────────────────────────────
 
     @Override
     @Transactional
-    public void changePassword(String userId, String accessToken, ChangePasswordRequest request) {
-        User user = userRepository.findByUserId(userId)
-                .orElseThrow(() -> new BadCredentialsException("User not found"));
+    public void changePassword(String sellerId, String accessToken, ChangePasswordRequest request) {
+        Seller seller = sellerRepository.findBySellerId(sellerId)
+                .orElseThrow(() -> new BadCredentialsException("Seller not found"));
 
-        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+        if (!passwordEncoder.matches(request.getCurrentPassword(), seller.getPassword())) {
             throw new BadCredentialsException("Current password is incorrect");
         }
 
-        user.changePassword(passwordEncoder.encode(request.getNewPassword()));
-        refreshTokenService.deleteAll(userId);
-        deviceSessionService.removeAll(userId);
+        seller.changePassword(passwordEncoder.encode(request.getNewPassword()));
+        refreshTokenService.deleteAll(sellerId);
+        deviceSessionService.removeAll(sellerId);
         blacklistTokenService.add(accessToken, jwtTokenProvider.getRemainingMs(accessToken));
 
-        log.info("[User] Password changed. All devices logged out. userId={}", userId);
+        log.info("[Seller] Password changed. All devices logged out. sellerId={}", sellerId);
     }
 
     // ── 내부 공통 토큰 발급 ───────────────────────────────────────────────────
 
-    private AuthTokens issueTokens(String userId, String email) {
+    private AuthTokens issueTokens(String sellerId, String email) {
         String deviceId     = UUID.randomUUID().toString();
         String accessToken  = jwtTokenProvider.generateAccessToken(
-                userId, email, "ROLE_USER", deviceId, USER_TYPE);
-        String refreshToken = jwtTokenProvider.generateRefreshToken(userId, deviceId);
+                sellerId, email, "ROLE_SELLER", deviceId, USER_TYPE);
+        String refreshToken = jwtTokenProvider.generateRefreshToken(sellerId, deviceId);
 
-        deviceSessionService.addDevice(userId, deviceId);
-        refreshTokenService.save(userId, deviceId, refreshToken);
+        deviceSessionService.addDevice(sellerId, deviceId);
+        refreshTokenService.save(sellerId, deviceId, refreshToken);
 
         return AuthTokens.ofNew(accessToken, refreshToken, deviceId);
     }

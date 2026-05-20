@@ -5,39 +5,34 @@ import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
-@Table(name = "users")
+@Table(name = "sellers")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
 @Builder
-public class User extends BaseEntity {
+public class Seller extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(nullable = false, unique = true)
-    private String userId;
+    private String sellerId;  // UUID
 
     @Column(nullable = false, unique = true)
     private String email;
 
     @Column(nullable = false)
-    private String name;
+    private String password;
 
-    private String password;  // 소셜 로그인은 null
-
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private AuthProvider provider;  // LOCAL / GOOGLE / NAVER
-
-    private String providerId;
-
-    public void updateName(String name) {
-        this.name = name;
-    }
+    private String name;
 
     public void changePassword(String encodedPassword) {
         this.password = encodedPassword;
+    }
+
+    public void updateName(String name) {
+        this.name = name;
     }
 }
