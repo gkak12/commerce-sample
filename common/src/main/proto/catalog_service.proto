@@ -1,0 +1,185 @@
+syntax = "proto3";
+
+package commerce.catalog;
+
+option java_package = "com.commerce.grpc.catalog";
+option java_outer_classname = "CatalogServiceProto";
+option java_multiple_files = true;
+
+// catalog-service gRPC 서버가 구현
+service CatalogService {
+
+    // ── 상품 조회 (공개) ───────────────────────────────────────────────────────
+    rpc GetProduct     (GetProductRequest)     returns (GetProductResponse);
+    rpc GetProductList (GetProductListRequest) returns (GetProductListResponse);
+
+    // ── 판매자 (인증 필요) ─────────────────────────────────────────────────────
+    rpc RegisterSeller    (RegisterSellerRequest)    returns (SellerResponse);
+    rpc GetMySellerInfo   (GetMySellerInfoRequest)   returns (SellerResponse);
+    rpc UpdateSellerInfo  (UpdateSellerInfoRequest)  returns (SellerResponse);
+
+    // ── 상품 관리 — 판매자 전용 ────────────────────────────────────────────────
+    rpc CreateProduct  (CreateProductRequest)  returns (ProductResponse);
+    rpc UpdateProduct  (UpdateProductRequest)  returns (ProductResponse);
+    rpc DeleteProduct  (DeleteProductRequest)  returns (EmptyResponse);
+    rpc GetMyProducts  (GetMyProductsRequest)  returns (GetProductListResponse);
+
+    // ── 관리자 전용 ────────────────────────────────────────────────────────────
+    rpc GetSellerList  (GetSellerListRequest)  returns (GetSellerListResponse);
+    rpc ApproveSeller  (SellerActionRequest)   returns (EmptyResponse);
+    rpc RejectSeller   (SellerActionRequest)   returns (EmptyResponse);
+    rpc SuspendSeller  (SellerActionRequest)   returns (EmptyResponse);
+    rpc SuspendProduct (SuspendProductRequest) returns (EmptyResponse);
+}
+
+// ── 공통 ──────────────────────────────────────────────────────────────────────
+
+message EmptyResponse {
+    bool success = 1;
+}
+
+// ── 상품 메시지 ───────────────────────────────────────────────────────────────
+
+message ProductProto {
+    string product_id   = 1;
+    string seller_id    = 2;
+    int64  category_id  = 3;
+    string name         = 4;
+    string description  = 5;
+    string base_price   = 6;  // BigDecimal → String 변환
+    string status       = 7;
+    string created_at   = 8;
+    repeated ProductImageProto  images  = 9;
+    repeated ProductOptionProto options = 10;
+}
+
+message ProductImageProto {
+    string url          = 1;
+    bool   is_thumbnail = 2;
+    int32  sort_order   = 3;
+}
+
+message ProductOptionProto {
+    string option_name      = 1;
+    string option_value     = 2;
+    string additional_price = 3;
+    int32  stock_quantity   = 4;
+}
+
+message GetProductRequest {
+    string product_id = 1;
+}
+
+message GetProductResponse {
+    bool         found   = 1;
+    ProductProto product = 2;
+}
+
+message ProductResponse {
+    bool         found   = 1;
+    ProductProto product = 2;
+}
+
+message GetProductListRequest {
+    int64  category_id = 1;  // 0이면 전체
+    int32  page        = 2;
+    int32  size        = 3;
+}
+
+message GetProductListResponse {
+    repeated ProductProto products     = 1;
+    int32                 total_count  = 2;
+    int32                 total_pages  = 3;
+    int32                 current_page = 4;
+}
+
+message CreateProductRequest {
+    string user_id      = 1;
+    string name         = 2;
+    string description  = 3;
+    string base_price   = 4;
+    int64  category_id  = 5;
+    repeated ProductImageProto  images  = 6;
+    repeated ProductOptionProto options = 7;
+}
+
+message UpdateProductRequest {
+    string user_id     = 1;
+    string product_id  = 2;
+    string name        = 3;
+    string description = 4;
+    string base_price  = 5;
+    int64  category_id = 6;
+    repeated ProductImageProto  images  = 7;
+    repeated ProductOptionProto options = 8;
+}
+
+message DeleteProductRequest {
+    string user_id    = 1;
+    string product_id = 2;
+}
+
+message GetMyProductsRequest {
+    string user_id = 1;
+    int32  page    = 2;
+    int32  size    = 3;
+}
+
+message SuspendProductRequest {
+    string product_id = 1;
+}
+
+// ── 판매자 메시지 ─────────────────────────────────────────────────────────────
+
+message SellerProto {
+    string seller_id        = 1;
+    string business_name    = 2;
+    string business_number  = 3;
+    string owner_name       = 4;
+    string phone            = 5;
+    string email            = 6;
+    string status           = 7;
+    string created_at       = 8;
+}
+
+message SellerResponse {
+    bool        found  = 1;
+    SellerProto seller = 2;
+}
+
+message RegisterSellerRequest {
+    string user_id         = 1;
+    string business_name   = 2;
+    string business_number = 3;
+    string owner_name      = 4;
+    string phone           = 5;
+    string email           = 6;
+}
+
+message GetMySellerInfoRequest {
+    string user_id = 1;
+}
+
+message UpdateSellerInfoRequest {
+    string user_id       = 1;
+    string business_name = 2;
+    string phone         = 3;
+    string email         = 4;
+}
+
+message GetSellerListRequest {
+    string status = 1;  // 빈 문자열이면 전체
+    int32  page   = 2;
+    int32  size   = 3;
+}
+
+message GetSellerListResponse {
+    repeated SellerProto sellers     = 1;
+    int32                total_count = 2;
+    int32                total_pages = 3;
+    int32                current_page = 4;
+}
+
+message SellerActionRequest {
+    string seller_id = 1;
+}

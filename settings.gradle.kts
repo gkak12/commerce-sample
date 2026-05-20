@@ -6,5 +6,6 @@ include(
     "order-service",
     "payment-service",
     "delivery-service",
-    "point-service"
+    "point-service",
+    "catalog-service"
 )

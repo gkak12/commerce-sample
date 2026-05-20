@@ -125,6 +125,9 @@ grpc:
     point-service:
       address: static://localhost:9094
       negotiation-type: plaintext
+    catalog-service:
+      address: static://localhost:9095
+      negotiation-type: plaintext
     delivery-service:
       address: static://localhost:9093
       negotiation-type: plaintext
@@ -187,6 +190,14 @@ resilience4j:
         permitted-number-of-calls-in-half-open-state: 3
         register-health-indicator: true
       delivery-service:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        slow-call-duration-threshold: 3s
+        slow-call-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        register-health-indicator: true
+      catalog-service:
         sliding-window-size: 10
         failure-rate-threshold: 50
         slow-call-duration-threshold: 3s

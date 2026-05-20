@@ -126,9 +126,8 @@ public class MyPageController {
                 delivery.put("address", deliveryResp.getAddress());
                 delivery.put("startedAt", deliveryResp.getStartedAt());
                 response.put("delivery", delivery);
-            } else {
-                response.put("delivery", null);
             }
+            // 배송 미시작 시 delivery 필드 자체를 응답에서 제외 (null 키 vs 필드 부재 구분)
 
             return response;
         });
