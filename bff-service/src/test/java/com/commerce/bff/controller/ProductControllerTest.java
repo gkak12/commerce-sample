@@ -7,21 +7,15 @@ import com.commerce.grpc.catalog.GetProductResponse;
 import com.commerce.grpc.catalog.ProductImageProto;
 import com.commerce.grpc.catalog.ProductOptionProto;
 import com.commerce.grpc.catalog.ProductProto;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
-import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -29,34 +23,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(controllers = ProductController.class)
-@Import(ProductMapperImpl.class)
+@Import({ProductMapperImpl.class, BaseControllerTest.MethodSecurityConfig.class})
 @DisplayName("ProductController 단위 테스트")
-class ProductControllerTest {
-
-    /**
-     * SecurityConfig 전체를 import하면 JwtTokenProvider 등 의존 빈이 없어 컨텍스트 로드 실패.
-     * → @EnableMethodSecurity만 활성화하는 최소 설정으로 @PreAuthorize 동작을 보장.
-     */
-    @TestConfiguration
-    @EnableMethodSecurity
-    static class TestSecurityConfig { }
+class ProductControllerTest extends BaseControllerTest {
 
     @Autowired
     MockMvc mockMvc;
 
     @MockBean
     CatalogGrpcClient catalogGrpcClient;
-
-    @MockBean
-    RedisTemplate<String, String> redisTemplate;
-
-    @BeforeEach
-    @SuppressWarnings("unchecked")
-    void setUp() {
-        ValueOperations<String, String> valueOps = mock(ValueOperations.class);
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.increment(anyString())).thenReturn(1L);
-    }
 
     // ── GET /api/products ─────────────────────────────────────────────────────
 

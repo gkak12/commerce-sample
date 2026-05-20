@@ -17,8 +17,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -31,9 +29,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(controllers = MyPageController.class)
-@Import(MyPageMapperImpl.class) // MapStruct 생성 구현체 직접 주입 (default 메서드만 있어 코드 생성 최소화)
+@Import({MyPageMapperImpl.class, BaseControllerTest.MethodSecurityConfig.class})
 @DisplayName("MyPageController 단위 테스트")
-class MyPageControllerTest {
+class MyPageControllerTest extends BaseControllerTest {
 
     @Autowired
     MockMvc mockMvc;
@@ -47,10 +45,6 @@ class MyPageControllerTest {
     @MockBean
     DeliveryGrpcClient deliveryGrpcClient;
 
-    // RateLimitInterceptor → RedisTemplate 의존성 (@WebMvcTest는 Redis를 auto-configure하지 않음)
-    @MockBean
-    RedisTemplate<String, String> redisTemplate;
-
     // MyPageController 생성자 의존성 (@WebMvcTest는 @Service를 스캔하지 않음)
     @MockBean
     MyPageCacheService cacheService;
@@ -58,11 +52,6 @@ class MyPageControllerTest {
     @BeforeEach
     @SuppressWarnings("unchecked")
     void setUp() {
-        // RateLimitInterceptor NPE 방지: opsForValue().increment() 스터빙
-        ValueOperations<String, String> valueOps = mock(ValueOperations.class);
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        when(valueOps.increment(anyString())).thenReturn(1L);
-
         // 캐시 서비스 pass-through: Supplier를 그대로 실행하여 gRPC mock + 실제 mapper 결과 반영
         // 시그니처: getOrderList(String, int, int, Class<T>, Supplier<T>) → Supplier는 인덱스 4
         lenient().doAnswer(inv -> ((Supplier<?>) inv.getArgument(4)).get())
