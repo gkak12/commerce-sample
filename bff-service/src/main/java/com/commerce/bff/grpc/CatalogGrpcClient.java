@@ -1,8 +1,9 @@
 package com.commerce.bff.grpc;
 
+import com.commerce.bff.dto.seller.SellerRegisterRequest;
+import com.commerce.bff.dto.seller.SellerUpdateRequest;
 import com.commerce.grpc.catalog.*;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
-import lombok.RequiredArgsConstructor;
 import net.devh.boot.grpc.client.inject.GrpcClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,7 +45,7 @@ public class CatalogGrpcClient {
     // ── 판매자 ────────────────────────────────────────────────────────────────
 
     @CircuitBreaker(name = "catalog-service")
-    public SellerResponse registerSeller(String userId, RegisterSellerRequest request) {
+    public SellerResponse registerSeller(String userId, SellerRegisterRequest request) {
         log.debug("[gRPC] registerSeller. userId={}", userId);
         return stub.registerSeller(RegisterSellerRequest.newBuilder()
                 .setUserId(userId)
@@ -64,7 +65,7 @@ public class CatalogGrpcClient {
     }
 
     @CircuitBreaker(name = "catalog-service")
-    public SellerResponse updateSellerInfo(String userId, UpdateSellerInfoRequest request) {
+    public SellerResponse updateSellerInfo(String userId, SellerUpdateRequest request) {
         return stub.updateSellerInfo(UpdateSellerInfoRequest.newBuilder()
                 .setUserId(userId)
                 .setBusinessName(request.getBusinessName())

@@ -1,7 +1,6 @@
 package com.commerce.bff.cache;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -12,7 +11,6 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
-import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
 
@@ -51,8 +49,6 @@ public class MyPageCacheService {
 
     private static final Logger log = LoggerFactory.getLogger(MyPageCacheService.class);
 
-    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
-
     private final RedisTemplate<String, String> redisTemplate;
     private final ObjectMapper objectMapper;
 
@@ -73,25 +69,25 @@ public class MyPageCacheService {
 
     // ── 주문 목록 ──────────────────────────────────────────────────────────────
 
-    public Map<String, Object> getOrderList(String userId, int page, int size,
-                                            Supplier<Map<String, Object>> loader) {
+    public <T> T getOrderList(String userId, int page, int size,
+                              Class<T> clazz, Supplier<T> loader) {
         String cacheKey = "cache:orders:" + userId + ":" + page + ":" + size;
-        return getOrLoad(cacheKey, Duration.ofSeconds(orderListTtlSeconds), loader);
+        return getOrLoad(cacheKey, Duration.ofSeconds(orderListTtlSeconds), loader, clazz);
     }
 
     // ── 주문 상세 ──────────────────────────────────────────────────────────────
 
-    public Map<String, Object> getOrderDetail(String userId, String orderId,
-                                              Supplier<Map<String, Object>> loader) {
+    public <T> T getOrderDetail(String userId, String orderId,
+                                Class<T> clazz, Supplier<T> loader) {
         String cacheKey = "cache:order:" + userId + ":" + orderId;
-        return getOrLoad(cacheKey, Duration.ofSeconds(orderDetailTtlSeconds), loader);
+        return getOrLoad(cacheKey, Duration.ofSeconds(orderDetailTtlSeconds), loader, clazz);
     }
 
     // ── 포인트 잔액 ────────────────────────────────────────────────────────────
 
-    public Map<String, Object> getPoints(String userId, Supplier<Map<String, Object>> loader) {
+    public <T> T getPoints(String userId, Class<T> clazz, Supplier<T> loader) {
         String cacheKey = "cache:points:" + userId;
-        return getOrLoad(cacheKey, Duration.ofSeconds(pointTtlSeconds), loader);
+        return getOrLoad(cacheKey, Duration.ofSeconds(pointTtlSeconds), loader, clazz);
     }
 
     // ── 이벤트 기반 캐시 무효화 ────────────────────────────────────────────────
@@ -120,8 +116,6 @@ public class MyPageCacheService {
                 log.debug("[Cache][Evict] 주문 목록 캐시 삭제. count={}, userId={}", listKeys.size(), userId);
             }
         } catch (DataAccessException e) {
-            // 삭제 실패해도 이메일 발송 등 후속 작업에는 영향 없음
-            // 캐시는 TTL 만료 시 자연 제거됨
             log.warn("[Cache][Evict] Redis 장애로 캐시 삭제 실패 (TTL 만료로 자연 제거 예정). userId={}, orderId={}, error={}",
                     userId, orderId, e.getMessage());
         }
@@ -141,14 +135,13 @@ public class MyPageCacheService {
      *   RedisException 발생 → 캐시 우회 → gRPC 직접 호출 (graceful degradation)
      *   → 서비스는 정상 응답 유지 (캐시 없이 동작)
      */
-    private Map<String, Object> getOrLoad(String cacheKey, Duration ttl,
-                                          Supplier<Map<String, Object>> loader) {
+    private <T> T getOrLoad(String cacheKey, Duration ttl, Supplier<T> loader, Class<T> clazz) {
         try {
             // 1. 캐시 조회
             String cached = redisTemplate.opsForValue().get(cacheKey);
             if (cached != null) {
                 log.debug("[Cache] HIT. key={}", cacheKey);
-                return deserialize(cached);
+                return deserialize(cached, clazz);
             }
 
             log.debug("[Cache] MISS. key={}", cacheKey);
@@ -164,11 +157,11 @@ public class MyPageCacheService {
                     cached = redisTemplate.opsForValue().get(cacheKey);
                     if (cached != null) {
                         log.debug("[Cache] HIT (double-check). key={}", cacheKey);
-                        return deserialize(cached);
+                        return deserialize(cached, clazz);
                     }
 
                     // 4. 실제 데이터 조회 (gRPC 호출)
-                    Map<String, Object> result = loader.get();
+                    T result = loader.get();
 
                     // 5. 캐싱 (result가 null이면 캐싱하지 않음 — 장애 fallback 결과 제외)
                     if (result != null) {
@@ -193,7 +186,7 @@ public class MyPageCacheService {
 
                 cached = redisTemplate.opsForValue().get(cacheKey);
                 if (cached != null) {
-                    return deserialize(cached);
+                    return deserialize(cached, clazz);
                 }
 
                 // 7. 캐시가 여전히 없으면 직접 호출 (starvation 방지)
@@ -210,7 +203,7 @@ public class MyPageCacheService {
 
     // ── 직렬화 유틸 ────────────────────────────────────────────────────────────
 
-    private String serialize(Map<String, Object> data) {
+    private String serialize(Object data) {
         try {
             return objectMapper.writeValueAsString(data);
         } catch (JsonProcessingException e) {
@@ -219,9 +212,9 @@ public class MyPageCacheService {
         }
     }
 
-    private Map<String, Object> deserialize(String json) {
+    private <T> T deserialize(String json, Class<T> clazz) {
         try {
-            return objectMapper.readValue(json, MAP_TYPE);
+            return objectMapper.readValue(json, clazz);
         } catch (JsonProcessingException e) {
             log.warn("[Cache] Deserialization 실패 (캐시 무시). error={}", e.getMessage());
             return null;

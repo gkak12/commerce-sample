@@ -1,9 +1,13 @@
 package com.commerce.bff.controller;
 
 import com.commerce.bff.cache.MyPageCacheService;
+import com.commerce.bff.dto.mypage.OrderDetailResponse;
+import com.commerce.bff.dto.mypage.OrderListResponse;
+import com.commerce.bff.dto.mypage.PointResponse;
 import com.commerce.bff.grpc.DeliveryGrpcClient;
 import com.commerce.bff.grpc.OrderGrpcClient;
 import com.commerce.bff.grpc.PointGrpcClient;
+import com.commerce.bff.mapper.MyPageMapper;
 import com.commerce.grpc.delivery.GetDeliveryStatusResponse;
 import com.commerce.grpc.order.GetOrderStatusResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -17,10 +21,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
 
 /**
  * 마이페이지 API — 내부 서비스 조회는 gRPC 로 처리
@@ -43,39 +43,22 @@ public class MyPageController {
     private final PointGrpcClient pointGrpcClient;
     private final DeliveryGrpcClient deliveryGrpcClient;
     private final MyPageCacheService cacheService;
+    private final MyPageMapper myPageMapper;
 
     // ── 내 주문 목록 ────────────────────────────────────────────────────────────
     @Operation(summary = "내 주문 목록", description = "order-service에 gRPC로 조회합니다. (Redis 캐싱 30초)")
     @GetMapping("/orders")
-    public ResponseEntity<Map<String, Object>> getMyOrders(
+    public ResponseEntity<OrderListResponse> getMyOrders(
             @AuthenticationPrincipal UserDetails userDetails,
             @RequestParam(defaultValue = "0")  int page,
             @RequestParam(defaultValue = "10") int size) {
 
         String userId = userDetails.getUsername();
 
-        Map<String, Object> result = cacheService.getOrderList(userId, page, size, () -> {
-            var response = orderGrpcClient.getOrderList(userId, page, size);
-
-            List<Map<String, Object>> orders = response.getOrdersList().stream()
-                    .map(o -> {
-                        Map<String, Object> m = new LinkedHashMap<>();
-                        m.put("orderId", o.getOrderId());
-                        m.put("status", o.getStatus());
-                        m.put("totalAmount", o.getTotalAmount());
-                        m.put("createdAt", o.getCreatedAt());
-                        return m;
-                    })
-                    .toList();
-
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("userId", userId);
-            m.put("orders", orders);
-            m.put("currentPage", response.getCurrentPage());
-            m.put("totalCount", response.getTotalCount());
-            m.put("totalPages", response.getTotalPages());
-            return m;
-        });
+        OrderListResponse result = cacheService.getOrderList(userId, page, size,
+                OrderListResponse.class,
+                () -> myPageMapper.toOrderListResponse(userId,
+                        orderGrpcClient.getOrderList(userId, page, size)));
 
         return ResponseEntity.ok(result);
     }
@@ -83,54 +66,27 @@ public class MyPageController {
     // ── 주문 상세 + 배송 상태 통합 조회 ────────────────────────────────────────
     @Operation(summary = "주문 상세 + 배송 상태", description = "order-service와 delivery-service에 gRPC로 동시 조회합니다. (Redis 캐싱 10초)")
     @GetMapping("/orders/{orderId}")
-    public ResponseEntity<Map<String, Object>> getOrderDetail(
+    public ResponseEntity<OrderDetailResponse> getOrderDetail(
             @PathVariable String orderId,
             @AuthenticationPrincipal UserDetails userDetails) {
 
         String userId = userDetails.getUsername();
 
-        Map<String, Object> result = cacheService.getOrderDetail(userId, orderId, () -> {
-            // order-service gRPC 호출
-            GetOrderStatusResponse orderResp = orderGrpcClient.getOrderStatus(orderId, userId);
-            if (!orderResp.getFound()) {
-                Map<String, Object> notFound = new LinkedHashMap<>();
-                notFound.put("found", false);
-                notFound.put("message", "주문을 찾을 수 없습니다.");
-                return notFound;
-            }
+        OrderDetailResponse result = cacheService.getOrderDetail(userId, orderId,
+                OrderDetailResponse.class,
+                () -> {
+                    // order-service gRPC 호출
+                    GetOrderStatusResponse orderResp = orderGrpcClient.getOrderStatus(orderId, userId);
+                    if (!orderResp.getFound()) {
+                        return myPageMapper.toOrderDetailNotFound();
+                    }
 
-            // delivery-service gRPC 호출 (배송 시작 전이면 found=false)
-            GetDeliveryStatusResponse deliveryResp = deliveryGrpcClient.getDeliveryStatus(orderId, userId);
+                    // delivery-service gRPC 호출 (배송 시작 전이면 found=false)
+                    GetDeliveryStatusResponse deliveryResp =
+                            deliveryGrpcClient.getDeliveryStatus(orderId, userId);
 
-            Map<String, Object> response = new LinkedHashMap<>();
-            response.put("found", true);
-            response.put("orderId", orderResp.getOrderId());
-            response.put("status", orderResp.getStatus());
-            response.put("totalAmount", orderResp.getTotalAmount());
-            response.put("createdAt", orderResp.getCreatedAt());
-            response.put("items", orderResp.getItemsList().stream()
-                    .map(item -> {
-                        Map<String, Object> m = new LinkedHashMap<>();
-                        m.put("productId", item.getProductId());
-                        m.put("productName", item.getProductName());
-                        m.put("quantity", item.getQuantity());
-                        m.put("price", item.getPrice());
-                        return m;
-                    })
-                    .toList());
-
-            if (deliveryResp.getFound()) {
-                Map<String, Object> delivery = new LinkedHashMap<>();
-                delivery.put("deliveryId", deliveryResp.getDeliveryId());
-                delivery.put("status", deliveryResp.getStatus());
-                delivery.put("address", deliveryResp.getAddress());
-                delivery.put("startedAt", deliveryResp.getStartedAt());
-                response.put("delivery", delivery);
-            }
-            // 배송 미시작 시 delivery 필드 자체를 응답에서 제외 (null 키 vs 필드 부재 구분)
-
-            return response;
-        });
+                    return myPageMapper.toOrderDetailResponse(orderResp, deliveryResp);
+                });
 
         return ResponseEntity.ok(result);
     }
@@ -138,19 +94,14 @@ public class MyPageController {
     // ── 포인트 잔액 조회 ────────────────────────────────────────────────────────
     @Operation(summary = "포인트 잔액", description = "point-service에 gRPC로 조회합니다. (Redis 캐싱 60초)")
     @GetMapping("/points")
-    public ResponseEntity<Map<String, Object>> getMyPoints(
+    public ResponseEntity<PointResponse> getMyPoints(
             @AuthenticationPrincipal UserDetails userDetails) {
 
         String userId = userDetails.getUsername();
 
-        Map<String, Object> result = cacheService.getPoints(userId, () -> {
-            var pointResp = pointGrpcClient.getPointBalance(userId);
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("userId", userId);
-            m.put("totalPoint", pointResp.getTotalPoint());
-            m.put("found", pointResp.getFound());
-            return m;
-        });
+        PointResponse result = cacheService.getPoints(userId, PointResponse.class,
+                () -> myPageMapper.toPointResponse(userId,
+                        pointGrpcClient.getPointBalance(userId)));
 
         return ResponseEntity.ok(result);
     }

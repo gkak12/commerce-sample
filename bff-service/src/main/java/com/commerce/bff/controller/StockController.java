@@ -1,5 +1,7 @@
 package com.commerce.bff.controller;
 
+import com.commerce.bff.dto.stock.StockInitResponse;
+import com.commerce.bff.dto.stock.StockQueryResponse;
 import com.commerce.bff.stock.StockRedisService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -17,8 +19,6 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.Map;
 
 /**
  * 재고 관리 API
@@ -45,28 +45,28 @@ public class StockController {
         security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping("/{productId}/init")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Map<String, Object>> initStock(
+    public ResponseEntity<StockInitResponse> initStock(
             @PathVariable String productId,
             @RequestParam long quantity) {
 
         if (quantity <= 0) {
             return ResponseEntity.badRequest()
-                    .body(Map.of(
-                            "success", false,
-                            "message", "수량은 1 이상이어야 합니다.",
-                            "productId", productId
-                    ));
+                    .body(StockInitResponse.builder()
+                            .success(false)
+                            .message("수량은 1 이상이어야 합니다.")
+                            .productId(productId)
+                            .build());
         }
 
         stockRedisService.initStock(productId, quantity);
         log.info("[StockController] Stock initialized. productId={}, quantity={}", productId, quantity);
 
-        return ResponseEntity.ok(Map.of(
-                "success", true,
-                "message", "재고가 초기화되었습니다.",
-                "productId", productId,
-                "quantity", quantity
-        ));
+        return ResponseEntity.ok(StockInitResponse.builder()
+                .success(true)
+                .message("재고가 초기화되었습니다.")
+                .productId(productId)
+                .quantity(quantity)
+                .build());
     }
 
     /**
@@ -77,28 +77,28 @@ public class StockController {
         security = @SecurityRequirement(name = "bearerAuth"))
     @PutMapping("/{productId}/init")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<Map<String, Object>> resetStock(
+    public ResponseEntity<StockInitResponse> resetStock(
             @PathVariable String productId,
             @RequestParam long quantity) {
 
         if (quantity < 0) {
             return ResponseEntity.badRequest()
-                    .body(Map.of(
-                            "success", false,
-                            "message", "수량은 0 이상이어야 합니다.",
-                            "productId", productId
-                    ));
+                    .body(StockInitResponse.builder()
+                            .success(false)
+                            .message("수량은 0 이상이어야 합니다.")
+                            .productId(productId)
+                            .build());
         }
 
         stockRedisService.initStock(productId, quantity);
         log.info("[StockController] Stock reset. productId={}, quantity={}", productId, quantity);
 
-        return ResponseEntity.ok(Map.of(
-                "success", true,
-                "message", "재고가 재설정되었습니다.",
-                "productId", productId,
-                "quantity", quantity
-        ));
+        return ResponseEntity.ok(StockInitResponse.builder()
+                .success(true)
+                .message("재고가 재설정되었습니다.")
+                .productId(productId)
+                .quantity(quantity)
+                .build());
     }
 
     /**
@@ -107,24 +107,24 @@ public class StockController {
      */
     @Operation(summary = "재고 조회", description = "현재 재고 수량을 조회합니다. 인증 불필요.")
     @GetMapping("/{productId}")
-    public ResponseEntity<Map<String, Object>> getStock(
+    public ResponseEntity<StockQueryResponse> getStock(
             @Parameter(description = "상품 ID") @PathVariable String productId) {
         long stock = stockRedisService.getStock(productId);
 
         if (stock == -1L) {
-            return ResponseEntity.ok(Map.of(
-                    "success", false,
-                    "message", "재고 정보가 없습니다. 초기화가 필요합니다.",
-                    "productId", productId,
-                    "stock", -1
-            ));
+            return ResponseEntity.ok(StockQueryResponse.builder()
+                    .success(false)
+                    .message("재고 정보가 없습니다. 초기화가 필요합니다.")
+                    .productId(productId)
+                    .stock(-1L)
+                    .build());
         }
 
-        return ResponseEntity.ok(Map.of(
-                "success", true,
-                "productId", productId,
-                "stock", stock,
-                "inStock", stock > 0
-        ));
+        return ResponseEntity.ok(StockQueryResponse.builder()
+                .success(true)
+                .productId(productId)
+                .stock(stock)
+                .inStock(stock > 0)
+                .build());
     }
 }
