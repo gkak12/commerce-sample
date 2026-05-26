@@ -4,6 +4,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.MDC;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -37,7 +38,7 @@ public class TraceIdFilter extends OncePerRequestFilter {
 
         // 클라이언트가 traceId를 보내면 재사용, 없으면 신규 생성
         String traceId = request.getHeader(TRACE_ID_HEADER);
-        if (traceId == null || traceId.isBlank()) {
+        if (StringUtils.isBlank(traceId)) {
             traceId = UUID.randomUUID().toString().replace("-", "");
         }
 

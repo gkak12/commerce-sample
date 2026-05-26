@@ -1,5 +1,6 @@
 package com.commerce.common.trace;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.kafka.clients.producer.ProducerInterceptor;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
@@ -39,7 +40,7 @@ public class KafkaProducerTraceInterceptor implements ProducerInterceptor<String
     public ProducerRecord<String, Object> onSend(ProducerRecord<String, Object> record) {
         // MDC에서 traceId 가져오기 (없으면 신규 생성)
         String traceId = MDC.get("traceId");
-        if (traceId == null || traceId.isBlank()) {
+        if (StringUtils.isBlank(traceId)) {
             traceId = generateId();
         }
         String spanId = generateShortId();
