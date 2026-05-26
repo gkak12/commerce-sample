@@ -15,6 +15,9 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind:2.16.1")
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.16.1")
 
+    // Apache Commons Lang 의존성
+    implementation("org.apache.commons:commons-lang3:3.13.0")
+
     // JPA (BaseEntity에서 사용)
     compileOnly("jakarta.persistence:jakarta.persistence-api:3.1.0")
     compileOnly("org.springframework.data:spring-data-jpa:3.2.3")
@@ -28,6 +31,7 @@ dependencies {
     // gRPC — proto 컴파일 결과(서버 스텁 + 클라이언트 스텁) 공유
     implementation("io.grpc:grpc-stub:1.62.2")
     implementation("io.grpc:grpc-protobuf:1.62.2")
+
     // @Generated 어노테이션 (protoc 코드 생성에 필요)
     compileOnly("javax.annotation:javax.annotation-api:1.3.2")
 
