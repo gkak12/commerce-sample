@@ -29,12 +29,13 @@ Kafka 이벤트 기반 Saga 패턴, gRPC 내부 통신, Redis 재고 관리 등 
 
 ```
 commerce-sample
-├── common           # 공통 모듈 (Kafka 토픽, 이벤트, gRPC proto)
-├── bff-service      # API Gateway / BFF (포트: 8080)
-├── order-service    # 주문 서비스  (포트: 8081, gRPC: 9091)
-├── payment-service  # 결제 서비스  (포트: 8082)
-├── delivery-service # 배송 서비스  (포트: 8083, gRPC: 9093)
-└── point-service    # 포인트 서비스 (포트: 8084, gRPC: 9094)
+├── common           # 공통 모듈 (Kafka 토픽, 이벤트, gRPC proto, 분산 추적)
+├── bff-service      # API Gateway / BFF  (포트: 8080)
+├── catalog-service  # 상품/판매자 서비스  (포트: 8085, gRPC: 9095)
+├── order-service    # 주문 서비스         (포트: 8081, gRPC: 9091)
+├── payment-service  # 결제 서비스         (포트: 8082)
+├── delivery-service # 배송 서비스         (포트: 8083, gRPC: 9093)
+└── point-service    # 포인트 서비스        (포트: 8084, gRPC: 9094)
 ```
 
 ### 서비스별 역할
@@ -42,6 +43,7 @@ commerce-sample
 | 서비스 | 역할 |
 |--------|------|
 | **bff-service** | 외부 REST API, 인증/인가, Redis 재고 관리, Kafka 이벤트 발행, gRPC 클라이언트 |
+| **catalog-service** | 상품 조회/관리, 판매자 등록/승인, gRPC 카탈로그 서버 |
 | **order-service** | 주문 생성/상태관리, Saga 보상 처리, gRPC 주문 조회 서버 |
 | **payment-service** | 토스페이먼츠 연동, 결제 승인/실패 이벤트 발행 |
 | **delivery-service** | 배송 레코드 관리, gRPC 배송 조회 서버 |
@@ -56,8 +58,9 @@ commerce-sample
     │ REST
     ▼
 [bff-service :8080]
-    │                           ┌─ gRPC ─► [order-service :9091]
-    │ REST (내부)               ├─ gRPC ─► [delivery-service :9093]
+    │                           ┌─ gRPC ─► [catalog-service :9095]
+    │                           ├─ gRPC ─► [order-service :9091]
+    │                           ├─ gRPC ─► [delivery-service :9093]
     │                           └─ gRPC ─► [point-service :9094]
     │
     │ Kafka
@@ -70,6 +73,41 @@ commerce-sample
     │
     └─── order.cancel.requested ─────────► [order-service]
 ```
+
+---
+
+## 인증 구조
+
+3개의 회원 유형을 **별도 테이블과 컨트롤러로 완전 분리**하여 관리합니다.
+
+### 테이블 분리
+
+| 유형 | 테이블 | 컨트롤러 | 기본 경로 |
+|------|--------|----------|-----------|
+| 일반 회원 | `users` | `AuthController` | `/api/auth` |
+| 판매자 | `sellers` | `SellerAuthController` | `/api/auth/seller` |
+| 관리자 | `admins` | `AdminAuthController` | `/api/admin/auth` |
+
+### JWT 라우팅
+
+토큰에 `userType` 클레임을 포함하여 요청 시 적절한 테이블로 라우팅합니다.
+
+```
+JwtAuthenticationFilter
+    ├─ userType=USER   → CustomUserDetailsService   → users 테이블
+    ├─ userType=SELLER → SellerDetailsService       → sellers 테이블
+    └─ userType=ADMIN  → AdminDetailsService        → admins 테이블
+```
+
+### 쿠키 분리
+
+각 유형별로 독립적인 Refresh Token 쿠키를 사용합니다.
+
+| 유형 | 쿠키 이름 | 경로 |
+|------|-----------|------|
+| 일반 회원 | `refreshToken` | `/api/auth` |
+| 판매자 | `sellerRefreshToken` | `/api/auth/seller` |
+| 관리자 | `adminRefreshToken` | `/api/admin/auth` |
 
 ---
 
@@ -202,13 +240,44 @@ if (pointRepository.existsByOrderId(event.getOrderId())) {
 gRPC 및 Redis 호출 장애 시 연쇄 장애를 방지합니다.
 
 ```
-적용 대상: OrderGrpcClient, PointGrpcClient, DeliveryGrpcClient, StockRedisService
+적용 대상: CatalogGrpcClient, OrderGrpcClient, PointGrpcClient, DeliveryGrpcClient, StockRedisService
 
-설정:
+설정 (gRPC 서비스 공통):
   - 슬라이딩 윈도우: 10회
   - 실패율 임계값: 50%
-  - 대기 시간: 10초
-  - 재시도: 최대 2~3회 (지수 백오프)
+  - 느린 호출 기준: 3초 이상
+  - 느린 호출 임계값: 50%
+  - 서킷 오픈 대기 시간: 10초
+  - 재시도: 최대 3회 (지수 백오프: 500ms → 1s → 2s)
+```
+
+상태 전이 시 `CircuitBreakerEventListener`가 로그를 출력합니다.
+
+```
+CLOSED → OPEN     : ERROR (장애 감지, fallback 응답 중)
+OPEN   → HALF_OPEN: WARN  (복구 시도 중)
+HALF_OPEN → CLOSED: INFO  (정상 복구 완료)
+```
+
+### 7. 분산 추적 (MDC / traceId)
+
+HTTP 요청부터 Kafka Consumer까지 동일한 `traceId`로 전체 흐름을 추적합니다.
+
+```
+HTTP 요청 진입
+    → TraceIdFilter: MDC["traceId"] 생성 및 응답 헤더(X-Trace-Id)에 포함
+    → KafkaProducerTraceInterceptor: MDC에서 traceId 읽어 Kafka 메시지 헤더에 삽입
+    → (Kafka 브로커)
+    → KafkaConsumerConfig.traceRecordInterceptor: 헤더에서 traceId 추출 → MDC 세팅
+    → Consumer 로직의 모든 로그에 동일 traceId 자동 포함
+    → afterRecord(): MDC.remove()
+```
+
+로그 예시:
+```
+2026-05-27 10:00:01 [a1b2c3d4] INFO  OrderService - 주문 처리 시작
+2026-05-27 10:00:01 [a1b2c3d4] INFO  KafkaProducer - order.created 발행
+2026-05-27 10:00:02 [a1b2c3d4] INFO  OrderConsumer - order.created 수신
 ```
 
 ---
@@ -219,7 +288,7 @@ gRPC 및 Redis 호출 장애 시 연쇄 장애를 방지합니다.
 
 | 인프라 | 포트 | 용도 |
 |--------|------|------|
-| MySQL | 3306 | 서비스별 DB (5개) |
+| MySQL | 3306 | 서비스별 DB (6개) |
 | Kafka | 9092 | 이벤트 브로커 |
 | Redis | 6379 | 재고 캐시 |
 | Prometheus | 9090 | 메트릭 수집 |
@@ -230,6 +299,7 @@ gRPC 및 Redis 호출 장애 시 연쇄 장애를 방지합니다.
 | 서비스 | DB명 |
 |--------|------|
 | bff-service | bff_db |
+| catalog-service | commerce_catalog |
 | order-service | commerce_order |
 | payment-service | commerce_payment |
 | delivery-service | commerce_delivery |
@@ -239,15 +309,37 @@ gRPC 및 Redis 호출 장애 시 연쇄 장애를 방지합니다.
 
 ## API 명세
 
-### 인증 API (bff-service)
+### 일반 회원 인증 API
 
 | Method | URI | 설명 | 인증 |
 |--------|-----|------|------|
 | POST | `/api/auth/signup` | 회원가입 | 불필요 |
-| POST | `/api/auth/login` | 로그인 (JWT 발급) | 불필요 |
-| POST | `/api/auth/refresh` | 액세스 토큰 재발급 | 리프레시 토큰 (요청 바디) |
+| POST | `/api/auth/login` | 로그인 | 불필요 |
+| POST | `/api/auth/refresh` | 토큰 갱신 | Refresh Token |
+| POST | `/api/auth/logout` | 로그아웃 | 필요 |
+| POST | `/api/auth/password` | 비밀번호 변경 | 필요 |
 
-### 주문 API (bff-service)
+### 판매자 인증 API
+
+| Method | URI | 설명 | 인증 |
+|--------|-----|------|------|
+| POST | `/api/auth/seller/signup` | 판매자 회원가입 | 불필요 |
+| POST | `/api/auth/seller/login` | 판매자 로그인 | 불필요 |
+| POST | `/api/auth/seller/refresh` | 토큰 갱신 | Refresh Token |
+| POST | `/api/auth/seller/logout` | 로그아웃 | 필요 |
+| POST | `/api/auth/seller/password` | 비밀번호 변경 | 필요 |
+
+### 관리자 인증 API
+
+| Method | URI | 설명 | 인증 |
+|--------|-----|------|------|
+| POST | `/api/admin/accounts` | 관리자 계정 생성 (임시 비밀번호 이메일 발송) | ADMIN |
+| POST | `/api/admin/auth/login` | 관리자 로그인 | 불필요 |
+| POST | `/api/admin/auth/refresh` | 토큰 갱신 | Refresh Token |
+| POST | `/api/admin/auth/logout` | 로그아웃 | 필요 |
+| POST | `/api/admin/auth/password` | 비밀번호 변경 | 필요 |
+
+### 주문 API
 
 | Method | URI | 설명 | 인증 |
 |--------|-----|------|------|
@@ -262,7 +354,26 @@ gRPC 및 Redis 호출 장애 시 연쇄 장애를 방지합니다.
 | GET | `/api/my/orders/{orderId}` | 주문 상세 + 배송 상태 | gRPC → order, delivery |
 | GET | `/api/my/points` | 포인트 잔액 조회 | gRPC → point-service |
 
-### 재고 API (bff-service, ADMIN)
+### 상품 API (bff-service → catalog-service gRPC)
+
+| Method | URI | 설명 | 인증 |
+|--------|-----|------|------|
+| GET | `/api/products` | 상품 목록 조회 | 불필요 |
+| GET | `/api/products/{productId}` | 상품 상세 조회 | 불필요 |
+
+### 판매자 API (bff-service → catalog-service gRPC)
+
+| Method | URI | 설명 | 인증 |
+|--------|-----|------|------|
+| POST | `/api/sellers/register` | 판매자 사업자 정보 등록 | SELLER |
+| GET | `/api/sellers/me` | 내 판매자 정보 조회 | SELLER |
+| PUT | `/api/sellers/me` | 판매자 정보 수정 | SELLER |
+| POST | `/api/sellers/products` | 상품 등록 | SELLER |
+| PUT | `/api/sellers/products/{productId}` | 상품 수정 | SELLER |
+| DELETE | `/api/sellers/products/{productId}` | 상품 삭제 | SELLER |
+| GET | `/api/sellers/products` | 내 상품 목록 | SELLER |
+
+### 재고 API
 
 | Method | URI | 설명 | 인증 |
 |--------|-----|------|------|
@@ -292,6 +403,7 @@ gRPC 및 Redis 호출 장애 시 연쇄 장애를 방지합니다.
 | `delivery.started` | delivery-service | - | 3 |
 | `point.earned` | point-service | - | 3 |
 | `stock.restore` | order-service | bff-service | 3 |
+| `seller.approved` | catalog-service | bff-service | 3 |
 | `*.DLT` | 각 서비스 (3회 실패 시) | 각 서비스 DLT Consumer | 3 |
 
 ---
@@ -299,6 +411,31 @@ gRPC 및 Redis 호출 장애 시 연쇄 장애를 방지합니다.
 ## gRPC 서비스
 
 ```protobuf
+// catalog_service.proto
+service CatalogService {
+    // 상품 조회 (공개)
+    rpc GetProduct(GetProductRequest) returns (GetProductResponse);
+    rpc GetProductList(GetProductListRequest) returns (GetProductListResponse);
+
+    // 판매자 관리
+    rpc RegisterSeller(RegisterSellerRequest) returns (SellerResponse);
+    rpc GetMySellerInfo(GetMySellerInfoRequest) returns (SellerResponse);
+    rpc UpdateSellerInfo(UpdateSellerInfoRequest) returns (SellerResponse);
+
+    // 상품 관리 (판매자)
+    rpc CreateProduct(CreateProductRequest) returns (ProductResponse);
+    rpc UpdateProduct(UpdateProductRequest) returns (ProductResponse);
+    rpc DeleteProduct(DeleteProductRequest) returns (EmptyResponse);
+    rpc GetMyProducts(GetMyProductsRequest) returns (GetProductListResponse);
+
+    // 관리자
+    rpc GetSellerList(GetSellerListRequest) returns (GetSellerListResponse);
+    rpc ApproveSeller(SellerActionRequest) returns (EmptyResponse);
+    rpc RejectSeller(SellerActionRequest) returns (EmptyResponse);
+    rpc SuspendSeller(SellerActionRequest) returns (EmptyResponse);
+    rpc SuspendProduct(SuspendProductRequest) returns (EmptyResponse);
+}
+
 // order_query.proto
 service OrderQueryService {
     rpc GetOrderStatus(GetOrderStatusRequest) returns (GetOrderStatusResponse);
@@ -324,17 +461,68 @@ service PointQueryService {
 
 ```sql
 users
-  user_id     VARCHAR(36)  -- 사용자 고유 ID
+  id          BIGINT       -- PK
+  user_id     VARCHAR(36)  -- UUID
   email       VARCHAR(255)
   name        VARCHAR(100)
-  password    VARCHAR(255) -- 로컬 로그인 시
+  password    VARCHAR(255) -- 소셜 로그인 시 null
   provider    VARCHAR(20)  -- LOCAL, GOOGLE, NAVER
-  role        VARCHAR(20)  -- USER, ADMIN
+  provider_id VARCHAR(255)
+
+sellers
+  id          BIGINT       -- PK
+  seller_id   VARCHAR(36)  -- UUID
+  email       VARCHAR(255)
+  password    VARCHAR(255)
+  name        VARCHAR(100)
+
+admins
+  id                       BIGINT       -- PK
+  admin_id                 VARCHAR(36)  -- UUID
+  email                    VARCHAR(255)
+  password                 VARCHAR(255)
+  name                     VARCHAR(100)
+  password_change_required BOOLEAN      -- 임시 비밀번호 변경 필요 여부
+  created_by               VARCHAR(36)  -- 생성한 관리자 adminId (최초 관리자는 null)
 
 product_stock
   product_id  VARCHAR(100) -- PK
   quantity    BIGINT       -- 현재 재고 (Redis 스냅샷)
   synced_at   DATETIME
+```
+
+### commerce_catalog
+
+```sql
+sellers
+  id              BIGINT       -- PK
+  user_id         VARCHAR(36)
+  business_name   VARCHAR(100)
+  business_number VARCHAR(20)
+  owner_name      VARCHAR(100)
+  phone           VARCHAR(20)
+  email           VARCHAR(255)
+  status          VARCHAR(20)  -- PENDING, APPROVED, REJECTED, SUSPENDED
+
+products
+  id          BIGINT       -- PK
+  product_id  VARCHAR(36)  -- UUID
+  seller_id   BIGINT       -- FK
+  name        VARCHAR(200)
+  price       DECIMAL(19,2)
+  category_id BIGINT
+  status      VARCHAR(20)  -- ACTIVE, SUSPENDED
+
+product_images
+  id         BIGINT
+  product_id BIGINT       -- FK
+  url        VARCHAR(500)
+
+product_options
+  id         BIGINT
+  product_id BIGINT       -- FK
+  name       VARCHAR(100)
+  extra_price DECIMAL(19,2)
 ```
 
 ### commerce_order
@@ -443,11 +631,12 @@ spring.security.oauth2.client.registration.naver.client-id
 ### 3. 서비스 실행 순서
 
 ```
-1. order-service
-2. payment-service
-3. delivery-service
-4. point-service
-5. bff-service
+1. catalog-service
+2. order-service
+3. payment-service
+4. delivery-service
+5. point-service
+6. bff-service
 ```
 
 ### 4. Swagger UI
