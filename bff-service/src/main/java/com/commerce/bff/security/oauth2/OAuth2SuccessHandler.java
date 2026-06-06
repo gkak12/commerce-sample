@@ -2,6 +2,7 @@ package com.commerce.bff.security.oauth2;
 
 import com.commerce.bff.config.CookieProperties;
 import com.commerce.bff.config.JwtProperties;
+import com.commerce.bff.config.OAuth2Properties;
 import com.commerce.bff.security.DeviceSessionService;
 import com.commerce.bff.security.JwtTokenProvider;
 import com.commerce.bff.security.RefreshTokenService;
@@ -29,12 +30,14 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
 
     private static final Logger log = LoggerFactory.getLogger(OAuth2SuccessHandler.class);
     private static final String REFRESH_TOKEN_COOKIE = "refreshToken";
+    private static final String CLIENT_TYPE_MOBILE   = "MOBILE";
 
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenService refreshTokenService;
     private final DeviceSessionService deviceSessionService;
     private final JwtProperties jwtProperties;
     private final CookieProperties cookieProperties;
+    private final OAuth2Properties oAuth2Properties;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -63,13 +66,12 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
             //         "최대 로그인 기기 수 초과로 자동 로그아웃되었습니다.");
         }
 
-        // Refresh Token Redis 저장 (기기별)
         refreshTokenService.save(oAuth2User.getUserId(), deviceId, refreshToken);
 
         // ↓ 소셜 로그인 알림 푸시 발송 위치
         // pushNotificationService.sendLoginAlert(oAuth2User.getUserId(), deviceId, request.getRemoteAddr());
 
-        // OAuth2는 항상 브라우저 기반 → Refresh Token: HttpOnly Cookie
+        // Refresh Token: HttpOnly Cookie (웹/모바일 공통)
         ResponseCookie refreshCookie = ResponseCookie.from(REFRESH_TOKEN_COOKIE, refreshToken)
                 .httpOnly(true)
                 .secure(cookieProperties.isSecure())
@@ -80,9 +82,38 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
 
         response.addHeader("Set-Cookie", refreshCookie.toString());
 
-        log.info("[OAuth2] Token issued. userId={}, deviceId={}", oAuth2User.getUserId(), deviceId);
+        log.info("[OAuth2] Token issued. userId={}, deviceId={}, clientType={}",
+                oAuth2User.getUserId(), deviceId, resolveClientType(request));
 
-        // Access Token + deviceId만 Body에 포함 (Refresh Token은 Cookie로 전달)
+        // state 파라미터에서 client_type 추출 후 응답 분기
+        String clientType = resolveClientType(request);
+
+        if (CLIENT_TYPE_MOBILE.equals(clientType)) {
+            // 모바일: JSON 응답
+            sendJsonResponse(response, accessToken, deviceId);
+        } else {
+            // 웹: 프론트 콜백 URL로 리다이렉트
+            String redirectUrl = oAuth2Properties.getWebRedirectUri()
+                    + "?accessToken=" + accessToken
+                    + "&deviceId=" + deviceId;
+            getRedirectStrategy().sendRedirect(request, response, redirectUrl);
+        }
+    }
+
+    /**
+     * state 파라미터 형식: {originalState}:{clientType}
+     * CustomOAuth2AuthorizationRequestResolver 에서 인코딩한 값
+     */
+    private String resolveClientType(HttpServletRequest request) {
+        String state = request.getParameter("state");
+        if (state != null && state.contains(":")) {
+            return state.substring(state.lastIndexOf(":") + 1);
+        }
+        return "WEB"; // 기본값
+    }
+
+    private void sendJsonResponse(HttpServletResponse response,
+                                   String accessToken, String deviceId) throws IOException {
         Map<String, String> body = new LinkedHashMap<>();
         body.put("accessToken", accessToken);
         body.put("tokenType", "Bearer");

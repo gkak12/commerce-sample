@@ -103,6 +103,9 @@ jwt:
 cookie:
   secure: false   # 로컬 개발환경 (HTTP). 운영 환경은 application-prod.yml에서 true로 설정
 
+oauth2:
+  web-redirect-uri: http://localhost:3000/auth/callback  # 소셜 로그인 성공 후 웹 콜백 URL
+
 cors:
   allowed-origins:
     - http://localhost:3000   # 로컬 프론트 개발 서버

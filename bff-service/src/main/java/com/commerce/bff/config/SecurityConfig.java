@@ -1,6 +1,7 @@
 package com.commerce.bff.config;
 
 import com.commerce.bff.security.*;
+import com.commerce.bff.security.oauth2.CustomOAuth2AuthorizationRequestResolver;
 import com.commerce.bff.security.oauth2.CustomOAuth2UserService;
 import com.commerce.bff.security.oauth2.OAuth2SuccessHandler;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +38,7 @@ public class SecurityConfig {
     private final BlacklistTokenService blacklistTokenService;
     private final CustomOAuth2UserService customOAuth2UserService;
     private final OAuth2SuccessHandler oAuth2SuccessHandler;
+    private final CustomOAuth2AuthorizationRequestResolver authorizationRequestResolver;
     private final CorsProperties corsProperties;
 
     @Bean
@@ -86,6 +88,8 @@ public class SecurityConfig {
                 .anyRequest().authenticated())
 
             .oauth2Login(oauth2 -> oauth2
+                .authorizationEndpoint(authorization -> authorization
+                    .authorizationRequestResolver(authorizationRequestResolver))
                 .userInfoEndpoint(userInfo ->
                     userInfo.userService(customOAuth2UserService))
                 .successHandler(oAuth2SuccessHandler))
