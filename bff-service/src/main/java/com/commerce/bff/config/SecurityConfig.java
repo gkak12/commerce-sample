@@ -3,6 +3,7 @@ package com.commerce.bff.config;
 import com.commerce.bff.security.*;
 import com.commerce.bff.security.oauth2.CustomOAuth2AuthorizationRequestResolver;
 import com.commerce.bff.security.oauth2.CustomOAuth2UserService;
+import com.commerce.bff.security.oauth2.CustomOidcUserService;
 import com.commerce.bff.security.oauth2.OAuth2SuccessHandler;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -36,6 +37,7 @@ public class SecurityConfig {
     private final SellerDetailsService sellerDetailsService;
     private final AdminDetailsService adminDetailsService;
     private final BlacklistTokenService blacklistTokenService;
+    private final CustomOidcUserService customOidcUserService;
     private final CustomOAuth2UserService customOAuth2UserService;
     private final OAuth2SuccessHandler oAuth2SuccessHandler;
     private final CustomOAuth2AuthorizationRequestResolver authorizationRequestResolver;
@@ -90,8 +92,9 @@ public class SecurityConfig {
             .oauth2Login(oauth2 -> oauth2
                 .authorizationEndpoint(authorization -> authorization
                     .authorizationRequestResolver(authorizationRequestResolver))
-                .userInfoEndpoint(userInfo ->
-                    userInfo.userService(customOAuth2UserService))
+                .userInfoEndpoint(userInfo -> userInfo
+                    .oidcUserService(customOidcUserService)   // Google, Kakao (OIDC)
+                    .userService(customOAuth2UserService))    // Naver (OAuth2)
                 .successHandler(oAuth2SuccessHandler))
 
             .addFilterBefore(

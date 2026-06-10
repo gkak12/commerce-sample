@@ -597,38 +597,112 @@ points
 docker-compose up -d
 ```
 
-### 2. application.yml 설정
+### 2. 외부 서비스 키 발급
 
-각 서비스의 `application.yml`에서 아래 항목을 환경에 맞게 수정합니다.
+#### Google OIDC
 
-```yaml
-# DB 접속 정보
-spring.datasource.url
-spring.datasource.username
-spring.datasource.password
+1. [Google Cloud Console](https://console.cloud.google.com) 접속
+2. API 및 서비스 → 사용자 인증 정보 → OAuth 클라이언트 ID 만들기
+3. 애플리케이션 유형: **웹 애플리케이션** 선택
+4. 승인된 리디렉션 URI 추가
+   ```
+   http://localhost:8080/login/oauth2/code/google
+   ```
+5. 발급된 **클라이언트 ID**, **클라이언트 보안 비밀번호** 복사
 
-# Redis
-spring.data.redis.password
+#### Kakao OIDC
 
-# Kafka
-spring.kafka.bootstrap-servers
+1. [Kakao Developers](https://developers.kakao.com) 접속
+2. 내 애플리케이션 → 애플리케이션 추가
+3. 앱 키 → **REST API 키** 복사 (client-id)
+4. 카카오 로그인 → 활성화 설정: ON
+5. Redirect URI 추가
+   ```
+   http://localhost:8080/login/oauth2/code/kakao
+   ```
+6. 보안 → Client Secret 코드 발급 (client-secret)
+7. 동의항목 → 아래 항목 **필수 동의** 설정
+   ```
+   openid (OIDC)
+   profile_nickname
+   account_email
+   ```
 
-# 메일 (bff-service)
-spring.mail.username
-spring.mail.password
+#### Naver OAuth2
 
-# 토스페이먼츠 (payment-service)
-toss.payment.secret-key
+1. [Naver Developers](https://developers.naver.com) 접속
+2. Application → 애플리케이션 등록
+3. 사용 API → **네이버 로그인** 선택
+4. 권한 → **이메일**, **이름** 체크
+5. 서비스 URL: `http://localhost:8080`
+6. Callback URL 추가
+   ```
+   http://localhost:8080/login/oauth2/code/naver
+   ```
+7. 발급된 **Client ID**, **Client Secret** 복사
 
-# JWT (bff-service)
-jwt.secret
+#### JWT Secret 생성
 
-# OAuth2 (bff-service)
-spring.security.oauth2.client.registration.google.client-id
-spring.security.oauth2.client.registration.naver.client-id
+32자 이상의 랜덤 문자열을 직접 생성합니다.
+
+```bash
+openssl rand -base64 32
 ```
 
-### 3. 서비스 실행 순서
+#### 네이버 메일 SMTP 비밀번호
+
+일반 로그인 비밀번호가 아닌 **SMTP 전용 비밀번호**를 발급받아야 합니다.
+
+```
+네이버 메일 → 환경설정 → POP3/SMTP 설정 → SMTP 사용: 사용함
+네이버 계정 → 보안 → 2단계 인증 사용 시 → 앱 비밀번호 발급
+```
+
+---
+
+### 3. application.yml 설정
+
+발급받은 키를 `bff-service/src/main/resources/application.yml`에 적용합니다.
+
+```yaml
+spring:
+  mail:
+    username: 본인-네이버-이메일@naver.com
+    password: 발급받은-SMTP-비밀번호
+
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: 발급받은-구글-클라이언트-ID
+            client-secret: 발급받은-구글-클라이언트-시크릿
+
+          kakao:
+            client-id: 발급받은-카카오-REST-API-키
+            client-secret: 발급받은-카카오-클라이언트-시크릿
+
+          naver:
+            client-id: 발급받은-네이버-클라이언트-ID
+            client-secret: 발급받은-네이버-클라이언트-시크릿
+
+jwt:
+  secret: openssl로-생성한-32자-이상-랜덤-문자열
+```
+
+> 운영 환경에서는 `application-prod.yml` 또는 환경 변수로 분리하는 것을 권장합니다.
+
+---
+
+### 4. 소셜 로그인 방식
+
+| 제공자 | 방식 | 사용자 정보 획득 |
+|--------|------|----------------|
+| Google | OIDC | ID Token 클레임에서 직접 파싱 |
+| Kakao | OIDC | ID Token 클레임에서 직접 파싱 |
+| Naver | OAuth2 | UserInfo API 별도 호출 |
+
+### 5. 서비스 실행 순서
 
 ```
 1. catalog-service
@@ -639,7 +713,7 @@ spring.security.oauth2.client.registration.naver.client-id
 6. bff-service
 ```
 
-### 4. Swagger UI
+### 6. Swagger UI
 
 ```
 http://localhost:8080/swagger-ui/index.html

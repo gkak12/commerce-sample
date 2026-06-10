@@ -39,8 +39,7 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
 
     private OAuth2UserInfo resolveUserInfo(String registrationId, java.util.Map<String, Object> attributes) {
         return switch (registrationId) {
-            case "google" -> new GoogleOAuth2UserInfo(attributes);
-            case "naver"  -> new NaverOAuth2UserInfo(attributes);
+            case "naver" -> new NaverOAuth2UserInfo(attributes);
             default -> throw new OAuth2AuthenticationException("Unsupported provider: " + registrationId);
         };
     }
