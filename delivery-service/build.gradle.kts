@@ -24,11 +24,11 @@ dependencies {
     annotationProcessor("jakarta.persistence:jakarta.persistence-api")
 
     compileOnly("org.projectlombok:lombok")
-    implementation("org.mapstruct:mapstruct:1.5.5.Final")
+    implementation("org.mapstruct:mapstruct:1.6.3")
 
     annotationProcessor("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok-mapstruct-binding:0.2.0")
-    annotationProcessor("org.mapstruct:mapstruct-processor:1.5.5.Final")
+    annotationProcessor("org.mapstruct:mapstruct-processor:1.6.3")
 
     // gRPC 서버 (배송 상태 조회 서비스 제공)
     implementation("net.devh:grpc-server-spring-boot-starter:3.1.0.RELEASE")
